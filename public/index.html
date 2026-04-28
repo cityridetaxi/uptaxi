@@ -209,6 +209,204 @@
         </section>
     </main>
 
+    <!-- Footer -->
+    <footer style="background-color: #111; color: #fff; padding: 2rem; margin-top: 5rem; border-top: 1px solid #333; text-align: center; font-size: 0.9rem;">
+        &copy; 2026 CityRideTaxi. All Rights Reserved.
+    </footer>
+
+    <!-- AI Chat & Support Ticket Floating Widget -->
+    <style>
+        .support-floating-btn {
+            position: fixed; bottom: 30px; right: 30px; z-index: 1000;
+            background-color: #B71C1C; color: white; border: none;
+            width: 60px; height: 60px; border-radius: 50%;
+            display: flex; justify-content: center; align-items: center;
+            box-shadow: 0 4px 15px rgba(183, 28, 28, 0.4);
+            cursor: pointer; transition: transform 0.3s;
+        }
+        .support-floating-btn:hover { transform: scale(1.1); }
+        .support-widget-panel {
+            position: fixed; bottom: 100px; right: 30px; z-index: 1000;
+            width: 350px; background: white; border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.15); display: none;
+            flex-direction: column; overflow: hidden;
+            border: 1px solid #eee; height: 500px;
+        }
+        .support-widget-panel.open { display: flex; animation: slideUp 0.3s ease; }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .support-header { background: #B71C1C; color: white; padding: 15px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; }
+        .support-header button { background: none; border: none; color: white; font-size: 1.2rem; cursor: pointer; }
+        
+        .support-tabs { display: flex; background: #f0f0f0; border-bottom: 1px solid #ccc; }
+        .support-tab { flex: 1; text-align: center; padding: 10px; cursor: pointer; font-size: 0.9rem; font-weight: 600; color: #555; transition: 0.3s; }
+        .support-tab.active { background: white; color: #B71C1C; border-bottom: 2px solid #B71C1C; }
+        
+        /* Chat UI */
+        .chat-area { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+        .chat-window { flex: 1; padding: 15px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; background: #fafafa; }
+        .chat-bubble { max-width: 85%; padding: 10px 14px; border-radius: 16px; font-size: 0.9rem; line-height: 1.4; word-wrap: break-word;}
+        .chat-ai { background: #e0e0e0; color: #1a1a1a; align-self: flex-start; border-bottom-left-radius: 4px; }
+        .chat-user { background: #B71C1C; color: white; align-self: flex-end; border-bottom-right-radius: 4px; }
+        .chat-input-area { display: flex; border-top: 1px solid #ddd; padding: 10px; background: white; }
+        .chat-input-area input { flex: 1; padding: 10px; border: 1px solid #ccc; border-radius: 20px; outline: none; font-size: 0.9rem; }
+        .chat-input-area button { background: #B71C1C; color: white; border: none; width: 40px; height: 40px; border-radius: 50%; margin-left: 10px; cursor: pointer; display: flex; justify-content: center; align-items: center; }
+        
+        /* Ticket UI */
+        .ticket-area { flex: 1; display: none; flex-direction: column; padding: 15px; gap: 10px; overflow-y: auto; background: white; }
+        .support-input { width: 100%; padding: 10px; border: 1px solid #ccc; border-radius: 6px; font-family: inherit; font-size: 0.9rem; }
+        .support-textarea { height: 80px; resize: none; }
+        .support-submit { background: #1a1a1a; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 5px;}
+        .support-submit:hover { background: #333; }
+        .support-loader { display: none; text-align: center; font-size: 0.9rem; padding: 10px; color: #555; }
+    </style>
+
+    <button id="support-btn" class="support-floating-btn" onclick="toggleSupportWidget()">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path><path d="M10 9h4"></path><path d="M12 11v4"></path></svg>
+    </button>
+
+    <div id="support-panel" class="support-widget-panel">
+        <div class="support-header">
+            <span>CityRide Assistant</span>
+            <button onclick="toggleSupportWidget()">&times;</button>
+        </div>
+        <div class="support-tabs">
+            <div class="support-tab active" id="tab-chat" onclick="switchWidgetTab('chat')">AI Chat</div>
+            <div class="support-tab" id="tab-ticket" onclick="switchWidgetTab('ticket')">Raise Ticket</div>
+        </div>
+        
+        <!-- Chat Area -->
+        <div class="chat-area" id="area-chat">
+            <div class="chat-window" id="chat-window">
+                <div class="chat-bubble chat-ai">Hello! I am the CityRide AI. How can I help you regarding pricing, outstation bookings, or local rides today?</div>
+            </div>
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Type your message..." onkeypress="handleChatEnter(event)">
+                <button onclick="sendChatMessage()"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg></button>
+            </div>
+        </div>
+
+        <!-- Ticket Area -->
+        <div class="ticket-area" id="area-ticket">
+            <p style="font-size: 0.85rem; color: #666; margin: 0;">Need human support? Raise a ticket and our team will email you back shortly!</p>
+            <input type="text" id="supp-name" class="support-input" placeholder="Your Name" required>
+            <input type="email" id="supp-email" class="support-input" placeholder="Your Email Address" required>
+            <textarea id="supp-query" class="support-input support-textarea" placeholder="Describe your issue..." required></textarea>
+            <button id="supp-submit-btn" class="support-submit" onclick="submitSupportTicket()">Send Ticket</button>
+            <div id="supp-loader" class="support-loader">Sending ticket...</div>
+            <div id="ticket-success" style="display:none; text-align:center; padding: 20px;">
+                <h4 style="color:#2e7d32; margin-bottom:5px;">Ticket Sent!</h4>
+                <p style="font-size:0.85rem; color:#666;">We have received your query. Check your email inbox shortly.</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleSupportWidget() {
+            const panel = document.getElementById('support-panel');
+            panel.classList.toggle('open');
+        }
+
+        function switchWidgetTab(mode) {
+            if (mode === 'chat') {
+                document.getElementById('tab-chat').classList.add('active');
+                document.getElementById('tab-ticket').classList.remove('active');
+                document.getElementById('area-chat').style.display = 'flex';
+                document.getElementById('area-ticket').style.display = 'none';
+            } else {
+                document.getElementById('tab-ticket').classList.add('active');
+                document.getElementById('tab-chat').classList.remove('active');
+                document.getElementById('area-ticket').style.display = 'flex';
+                document.getElementById('area-chat').style.display = 'none';
+            }
+        }
+
+        function appendChatBubble(role, text) {
+            const windowEl = document.getElementById('chat-window');
+            const bubble = document.createElement('div');
+            bubble.className = `chat-bubble ${role === 'user' ? 'chat-user' : 'chat-ai'}`;
+            bubble.textContent = text;
+            windowEl.appendChild(bubble);
+            windowEl.scrollTop = windowEl.scrollHeight;
+        }
+
+        function handleChatEnter(e) {
+            if (e.key === 'Enter') sendChatMessage();
+        }
+
+        async function sendChatMessage() {
+            const inputEl = document.getElementById('chat-input');
+            const text = inputEl.value.trim();
+            if (!text) return;
+
+            // User Message
+            appendChatBubble('user', text);
+            inputEl.value = '';
+
+            // Loading state
+            const windowEl = document.getElementById('chat-window');
+            const loadBubble = document.createElement('div');
+            loadBubble.className = 'chat-bubble chat-ai';
+            loadBubble.id = 'chat-loader';
+            loadBubble.innerHTML = '<i>Typing...</i>';
+            windowEl.appendChild(loadBubble);
+            windowEl.scrollTop = windowEl.scrollHeight;
+
+            try {
+                const response = await fetch(`${API_BASE_URL || ''}/api/chat`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ message: text })
+                });
+                const result = await response.json();
+                
+                loadBubble.remove();
+                if (result.success) {
+                    appendChatBubble('ai', result.reply);
+                } else {
+                    appendChatBubble('ai', "I'm having trouble connecting to Ground Command. Please try again later.");
+                }
+            } catch (err) {
+                loadBubble.remove();
+                appendChatBubble('ai', "Neural Link offline. Please use the Ticket tab.");
+            }
+        }
+
+        async function submitSupportTicket() {
+            const name = document.getElementById('supp-name').value.trim();
+            const email = document.getElementById('supp-email').value.trim();
+            const query = document.getElementById('supp-query').value.trim();
+            
+            if (!name || !email || !query) {
+                showAlert('Please fill all fields to submit ticket.', 'error');
+                return;
+            }
+
+            document.getElementById('supp-submit-btn').style.display = 'none';
+            document.getElementById('supp-loader').style.display = 'block';
+
+            try {
+                const response = await fetch(`${API_BASE_URL || ''}/api/support/ticket`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name, email, query })
+                });
+                
+                const result = await response.json();
+                document.getElementById('supp-loader').style.display = 'none';
+                
+                if (result.success) {
+                    document.getElementById('ticket-success').style.display = 'block';
+                } else {
+                    throw new Error(result.error || 'Failed to submit.');
+                }
+            } catch (err) {
+                showAlert(err.message, 'error');
+                document.getElementById('supp-submit-btn').style.display = 'block';
+                document.getElementById('supp-loader').style.display = 'none';
+            }
+        }
+    </script>
+
     <!-- Map Picker Modal -->
     <div id="map-modal" class="map-modal">
         <div class="map-modal-content">

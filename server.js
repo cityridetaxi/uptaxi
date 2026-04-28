@@ -7,12 +7,36 @@ const cron = require('node-cron');
 const axios = require('axios');
 const PDFDocument = require('pdfkit');
 const bcrypt = require('bcryptjs');
+const rateLimit = require('express-rate-limit');
+const { GoogleGenerativeAI } = require('@google/generative-ai');
 require('dotenv').config();
 
 const app = express();
 app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
+
+// --- RATE LIMITING (DDoS & Thread Attack Protection) ---
+// Global rule for general traffic (prevents basic floods)
+const globalLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 250, // Limit each IP to 250 requests per window
+    message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+    standardHeaders: true, 
+    legacyHeaders: false,
+});
+
+// Stricter rule protecting Database/Backend APIs against violent polling
+const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000, // 15 minutes
+    max: 80, // Limit each IP to 80 requests per window for sensitive routes
+    message: { error: 'Strict API Rate limit exceeded. Please lower your request frequency.' },
+    standardHeaders: true,
+    legacyHeaders: false,
+});
+
+app.use(globalLimiter); // Apply to all
+app.use('/api/', apiLimiter); // Extra layer for backend routes
 
 // Clean Navigation Routes
 app.get('/driver', (req, res) => res.sendFile(path.join(__dirname, 'public', 'driver.html')));
@@ -599,6 +623,96 @@ app.post('/api/vendor/login', async (req, res) => {
         res.status(401).json({ error: 'Auth Failure. Invalid Vendor ID/Key.' });
     } catch (err) {
         res.status(500).json({ error: 'Partner Auth Failure' });
+    }
+});
+
+// --- AI CHATBOT / SUPPORT WIDGET API ---
+app.post('/api/chat', async (req, res) => {
+    try {
+        const { message } = req.body;
+        if (!message) return res.status(400).json({ error: 'Message required' });
+
+        // Offline Fallback
+        if (!process.env.GEMINI_API_KEY) {
+            return res.json({ 
+                success: true, 
+                reply: "I am the CityRide AI. I am currently offline because the Ground Command has not connected my Neural Link API Key yet. Please call us directly!" 
+            });
+        }
+
+        const apiKey = (process.env.GEMINI_API_KEY || '').trim();
+        const genAI = new GoogleGenerativeAI(apiKey);
+        
+        // Final verified model: gemini-flash-latest is the only one with active quota for this project.
+        const model = genAI.getGenerativeModel({ model: "gemini-flash-latest" });
+
+        const prompt = `You are "CityRide AI", the official virtual assistant for CityRideTaxi.
+        Your style: Friendly, professional, and concise (max 2 sentences).
+        Core Knowledge:
+        - Fares: Sedan is ₹25/KM. SUV is ₹35/KM.
+        - Limits: Local rides are capped at 50 KM (otherwise use Outstation).
+        Response Instructions: 
+        - Only mention booking or redirecting if the user specifically asks how to book or seems ready to ride. 
+        - Answer their specific question directly first.
+        User says: ${message}`;
+
+        try {
+            const result = await model.generateContent(prompt);
+            res.json({ success: true, reply: result.response.text() });
+        } catch (apiErr) {
+            console.error('Google API Error Handled Gracefully:', apiErr.message);
+            // If the key is invalid, region-locked, or 404s, NEVER crash the server. Provide a fallback!
+            return res.json({
+                success: true,
+                reply: "I'm currently experiencing neural network maintenance or regional API locks. Please use the 'Raise Ticket' tab next to me to submit your query directly to our team!"
+            });
+        }
+    } catch (err) {
+        console.error('Core AI Route Error:', err.message);
+        res.status(500).json({ error: 'AI systems crashed.' });
+    }
+});
+
+app.post('/api/support/ticket', async (req, res) => {
+    try {
+        const { name, email, query } = req.body;
+        if (!name || !email || !query) return res.status(400).json({ error: 'All fields required.' });
+
+        // Send email to admin (Receiver)
+        const adminEmail = process.env.REPORT_RECEIVER_EMAIL || 'sureshit2005@gmail.com';
+        const subject = `🎫 New Support Ticket from ${name}`;
+        const html = `
+            <div style="font-family: sans-serif; padding: 20px; border: 1px solid #ddd; max-width: 600px;">
+                <h2 style="color: #ff5252;">New Support Ticket</h2>
+                <p><strong>Customer Name:</strong> ${name}</p>
+                <p><strong>Reply to Email:</strong> ${email}</p>
+                <hr style="border-top: 1px dashed #ccc;" />
+                <p><strong>Issue/Query:</strong></p>
+                <div style="background: #f8f8f8; padding: 15px; border-radius: 8px;">
+                    ${query}
+                </div>
+            </div>
+        `;
+        
+        await sendBrevoMail(adminEmail, subject, html);
+        
+        // --- AUTO-MESSAGE / AUTO-REPLY TO CUSTOMER ---
+        const customerSubject = `Ticket Received - CityRideTaxi Support`;
+        const customerHtml = `
+            <div style="font-family: sans-serif; padding: 20px; border-left: 4px solid #ff5252; background: #f9f9f9; max-width: 600px;">
+                <h3 style="color: #333;">Hello ${name},</h3>
+                <p>This is an automated message confirming that your support ticket has been logged into our system successfully.</p>
+                <p>Our operations team will review your query and respond directly to this email address within 12 business hours.</p>
+                <p style="margin-top: 20px; font-size: 0.9rem; color: #777;">Thank you for riding with us,<br/><strong>CityRideTaxi Command Team</strong></p>
+            </div>
+        `;
+        // Send auto-responder back to the customer's inputted email
+        await sendBrevoMail(email, customerSubject, customerHtml).catch(e => console.error('Auto-reply failed', e));
+
+        res.json({ success: true, message: 'Ticket received. We will email you shortly.' });
+    } catch (err) {
+        console.error('Ticket Error:', err.message);
+        res.status(500).json({ error: 'Failed to send ticket.' });
     }
 });
 
