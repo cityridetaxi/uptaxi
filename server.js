@@ -9,6 +9,7 @@ const PDFDocument = require('pdfkit');
 const bcrypt = require('bcryptjs');
 const rateLimit = require('express-rate-limit');
 const { GoogleGenerativeAI } = require('@google/generative-ai');
+const multer = require('multer');
 require('dotenv').config();
 
 const app = express();
@@ -16,21 +17,32 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// --- MULTER STORAGE CONFIGURATION ---
+const storage = multer.diskStorage({
+    destination: (req, file, cb) => {
+        cb(null, 'public/uploads/drivers');
+    },
+    filename: (req, file, cb) => {
+        const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+        cb(null, file.fieldname + '-' + uniqueSuffix + path.extname(file.originalname));
+    }
+});
+const upload = multer({ storage: storage });
+
 // --- RATE LIMITING (DDoS & Thread Attack Protection) ---
 // Global rule for general traffic (prevents basic floods)
 const globalLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 250, // Limit each IP to 250 requests per window
-    message: { error: 'Too many requests from this IP, please try again after 15 minutes.' },
+    windowMs: 15 * 60 * 1000, 
+    max: 3000, // Increased for polling
+    message: { error: 'Security Limit: Too many requests from this IP.' },
     standardHeaders: true, 
     legacyHeaders: false,
 });
 
-// Stricter rule protecting Database/Backend APIs against violent polling
 const apiLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // 15 minutes
-    max: 80, // Limit each IP to 80 requests per window for sensitive routes
-    message: { error: 'Strict API Rate limit exceeded. Please lower your request frequency.' },
+    windowMs: 15 * 60 * 1000, 
+    max: 2500, // Explicitly set to 2500 for high-frequency polling
+    message: { error: 'API Rate limit exceeded. Please lower your request frequency.' },
     standardHeaders: true,
     legacyHeaders: false,
 });
@@ -46,6 +58,7 @@ app.get('/admin-login', (req, res) => res.sendFile(path.join(__dirname, 'public'
 app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
 app.get('/auth', (req, res) => res.sendFile(path.join(__dirname, 'public', 'auth.html')));
 app.get('/driver-login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'driver-login.html')));
+app.get('/driver-register', (req, res) => res.sendFile(path.join(__dirname, 'public', 'driver-register.html')));
 app.get('/vendor-login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vendor-login.html')));
 app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
 
@@ -157,14 +170,45 @@ async function initDB() {
                 vehicle_type VARCHAR(50) DEFAULT 'sedan',
                 wallet_balance DECIMAL(10,2) DEFAULT 0,
                 is_blocked TINYINT DEFAULT 0,
+                approval_status VARCHAR(20) DEFAULT 'approved',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
 
-        // Migration: Ensure is_blocked exists
-        try {
-            await db.query('ALTER TABLE drivers ADD COLUMN is_blocked TINYINT DEFAULT 0');
-        } catch (e) { /* existing */ }
+        // Migration: Ensure columns exist
+        try { await db.query('ALTER TABLE drivers ADD COLUMN is_blocked TINYINT DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE drivers ADD COLUMN approval_status VARCHAR(20) DEFAULT "approved"'); } catch (e) {}
+
+        // Driver Applications (New Registrations)
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS driver_applications (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100),
+                email VARCHAR(100) UNIQUE,
+                password VARCHAR(255),
+                phone VARCHAR(20),
+                car_model VARCHAR(50),
+                car_number VARCHAR(20),
+                vehicle_type VARCHAR(50) DEFAULT 'sedan',
+                
+                -- Driver Documents
+                dl_front VARCHAR(255),
+                dl_back VARCHAR(255),
+                pvc VARCHAR(255),
+                aadhar_front VARCHAR(255),
+                aadhar_back VARCHAR(255),
+                
+                -- Vehicle Documents
+                rc_book VARCHAR(255),
+                insurance VARCHAR(255),
+                pollution VARCHAR(255),
+                permit VARCHAR(255),
+                
+                status VARCHAR(20) DEFAULT 'pending', -- pending, approved, rejected
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
 
         // Admins
         await db.query(`
@@ -587,6 +631,110 @@ app.post('/api/driver/login', async (req, res) => {
         res.status(401).json({ error: 'Pilot Authorization Denied.' });
     } catch (err) {
         res.status(500).json({ error: 'Pilot Auth Failure' });
+    }
+});
+
+// --- DRIVER REGISTRATION (MULTI-STEP WITH DOCS) ---
+app.post('/api/driver/register', upload.fields([
+    { name: 'dl_front', maxCount: 1 },
+    { name: 'dl_back', maxCount: 1 },
+    { name: 'pvc', maxCount: 1 },
+    { name: 'aadhar_front', maxCount: 1 },
+    { name: 'aadhar_back', maxCount: 1 },
+    { name: 'rc_book', maxCount: 1 },
+    { name: 'insurance', maxCount: 1 },
+    { name: 'pollution', maxCount: 1 },
+    { name: 'permit', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { name, email, password, phone, car_model, car_number, vehicle_type } = req.body;
+        
+        // Validation
+        if (!name || !email || !password || !phone) {
+            return res.status(400).json({ error: 'Core identity details are required.' });
+        }
+
+        // Check availability
+        const [existing] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
+        const [existingDriver] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
+        if (existing.length > 0 || existingDriver.length > 0) {
+            return res.status(400).json({ error: 'This email is already registered or has a pending application.' });
+        }
+
+        const salt = await bcrypt.genSalt(10);
+        const hashedPassword = await bcrypt.hash(password, salt);
+
+        const getFilePath = (fieldname) => {
+            return (req.files && req.files[fieldname]) ? `/uploads/drivers/${req.files[fieldname][0].filename}` : null;
+        };
+
+        const sql = `
+            INSERT INTO driver_applications 
+            (name, email, password, phone, car_model, car_number, vehicle_type, 
+             dl_front, dl_back, pvc, aadhar_front, aadhar_back, 
+             rc_book, insurance, pollution, permit) 
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `;
+
+        const values = [
+            name, email, hashedPassword, phone, car_model, car_number, vehicle_type,
+            getFilePath('dl_front'), getFilePath('dl_back'), getFilePath('pvc'), 
+            getFilePath('aadhar_front'), getFilePath('aadhar_back'),
+            getFilePath('rc_book'), getFilePath('insurance'), getFilePath('pollution'), getFilePath('permit')
+        ];
+
+        await db.query(sql, values);
+        res.json({ success: true, message: 'Application submitted! Ground Control will review your credentials shortly.' });
+    } catch (err) {
+        console.error('Driver Registration Error:', err.message);
+        res.status(500).json({ error: 'Failed to process application.' });
+    }
+});
+
+// --- ADMIN: MANAGE DRIVER APPLICATIONS ---
+app.get('/api/admin/driver-applications', async (req, res) => {
+    try {
+        const [apps] = await db.query('SELECT * FROM driver_applications ORDER BY created_at DESC');
+        res.json({ success: true, applications: apps });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch applications.' });
+    }
+});
+
+app.post('/api/admin/driver-applications/decision', async (req, res) => {
+    const { appId, status, note } = req.body; // status: approved or rejected
+    try {
+        const [apps] = await db.query('SELECT * FROM driver_applications WHERE id = ?', [appId]);
+        if (apps.length === 0) return res.status(404).json({ error: 'Application not found.' });
+        
+        const app = apps[0];
+
+        if (status === 'approved') {
+            // Move to drivers table
+            const sql = `
+                INSERT INTO drivers (name, email, password, phone, car_model, car_number, vehicle_type, approval_status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'approved')
+            `;
+            await db.query(sql, [app.name, app.email, app.password, app.phone, app.car_model, app.car_number, app.vehicle_type]);
+            
+            // Delete application
+            await db.query('DELETE FROM driver_applications WHERE id = ?', [appId]);
+
+            // Optional: Send Email Notification
+            await sendBrevoMail(app.email, 'CityRide Pilot Identity Verified', `<h2>Welcome to the fleet, Pilot!</h2><p>Your application has been authorized by Command. You can now log in to the Driver Portal and begin your missions.</p>`).catch(e => console.error('Approval notification failed', e));
+
+        } else {
+            // Update status to rejected
+            await db.query('UPDATE driver_applications SET status = "rejected", admin_note = ? WHERE id = ?', [note, appId]);
+            
+            // Optional: Send Email Notification
+            await sendBrevoMail(app.email, 'Pilot Application Update', `<h2>Ground Control Update</h2><p>Your application was not authorized at this time.</p><p><strong>Reason:</strong> ${note}</p>`).catch(e => console.error('Rejection notification failed', e));
+        }
+
+        res.json({ success: true, message: `Application ${status} successfully.` });
+    } catch (err) {
+        console.error('Decision Error:', err.message);
+        res.status(500).json({ error: 'Failed to process decision.' });
     }
 });
 

@@ -349,7 +349,9 @@
         async function loadAvailableJobs(driverId, hasActive = false) {
             try {
                 const res = await fetch(`${API_BASE_URL}/api/driver/jobs/${driverId}`);
+                if (!res.ok) return; // Handle 429 or other errors silently
                 const jobs = await res.json();
+                if (!Array.isArray(jobs)) return;
 
                 // Delta Tracking for New Jobs
                 if (initialLoadDone) {
@@ -473,8 +475,10 @@
         }
         async function loadMyJobs(driverId) {
             try {
-                const res = await fetch(`${API_BASE_URL}/api/driver/my-jobs/${driverId}?t=${Date.now()}`); // cache buster
+                const res = await fetch(`${API_BASE_URL}/api/driver/my-jobs/${driverId}?t=${Date.now()}`); 
+                if (!res.ok) return false; 
                 const jobs = await res.json();
+                if (!Array.isArray(jobs)) return false;
 
                 // Delta Tracking for Status Changes & New Captures
                 if (initialLoadDone) {

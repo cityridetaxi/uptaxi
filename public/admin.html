@@ -580,6 +580,7 @@
             <div class="nav-item" onclick="switchTab('bookings', this)">🚕 Mission Control</div>
             <div class="nav-item" onclick="switchTab('cancellations', this)">🛑 Abort Requests</div>
             <div class="nav-item" onclick="switchTab('drivers', this)">🏎️ Manage Drivers</div>
+            <div class="nav-item" onclick="switchTab('applications', this)">📋 Pilot Applications</div>
             <div class="nav-item" onclick="switchTab('users', this)">👥 Member Registry</div>
             <div class="nav-item" onclick="switchTab('vendors', this)">🤝 Network Partners</div>
         </div>
@@ -735,6 +736,31 @@
                         </tr>
                     </thead>
                     <tbody id="fleet-table-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Pilot Applications Tab -->
+        <div id="applications" class="tab-section">
+            <div class="stage-header">
+                <h1>Pilot <span class="text-accent">Applications</span></h1>
+                <p>Verify documents and authorize new platform partners.</p>
+            </div>
+            <div class="data-table-container">
+                <table class="cityride-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Identity</th>
+                            <th>Vehicle</th>
+                            <th>Docs Status</th>
+                            <th>Status</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="applications-table-body">
                         <!-- Loaded via JS -->
                     </tbody>
                 </table>
@@ -1119,6 +1145,36 @@
                             </tr>
                         `;
                     });
+                } else if (tabId === 'applications') {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications`);
+                    const { applications } = await res.json();
+                    const body = document.getElementById('applications-table-body');
+                    body.innerHTML = '';
+                    applications.forEach(app => {
+                        const hasAllDocs = app.dl_front && app.rc_book && app.aadhar_front;
+                        body.innerHTML += `
+                            <tr>
+                                <td>#APP-${app.id}</td>
+                                <td>
+                                    <strong>${app.name}</strong><br>
+                                    <span style="font-size:0.8rem; color:#888">${app.email}</span>
+                                </td>
+                                <td>
+                                    ${app.car_model}<br>
+                                    <strong style="color:var(--primary-red)">${app.car_number}</strong>
+                                </td>
+                                <td>
+                                    <span class="status-tag ${hasAllDocs ? 'status-completed' : 'status-pending'}">
+                                        ${hasAllDocs ? 'Full Set' : 'Incomplete'}
+                                    </span>
+                                </td>
+                                <td><span class="status-tag status-${app.status}">${app.status}</span></td>
+                                <td>
+                                    <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>Verify Docs</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
                 }
             } catch (err) { console.error(err); }
         }
@@ -1438,6 +1494,79 @@
             }
         });
 
+        // Application Management Functions
+        function viewApplication(app) {
+            const viewer = document.getElementById('doc-viewer-content');
+            viewer.innerHTML = '';
+            
+            const docs = [
+                { label: 'DL Front', path: app.dl_front },
+                { label: 'DL Back', path: app.dl_back },
+                { label: 'PVC', path: app.pvc },
+                { label: 'Aadhar Front', path: app.aadhar_front },
+                { label: 'Aadhar Back', path: app.aadhar_back },
+                { label: 'RC Book', path: app.rc_book },
+                { label: 'Insurance', path: app.insurance },
+                { label: 'Pollution', path: app.pollution },
+                { label: 'Permit', path: app.permit }
+            ];
+
+            docs.forEach(doc => {
+                if (doc.path) {
+                    viewer.innerHTML += `
+                        <div style="border: 1px solid #eee; padding: 10px; border-radius: 10px;">
+                            <p style="font-size: 0.7rem; font-weight: 800; margin-bottom: 10px;">${doc.label}</p>
+                            <img src="${doc.path}" style="width: 100%; border-radius: 5px; cursor: pointer;" onclick="window.open('${doc.path}', '_blank')">
+                        </div>
+                    `;
+                } else {
+                    viewer.innerHTML += `
+                        <div style="border: 1px solid #eee; padding: 10px; border-radius: 10px; background: #fffcfc; opacity: 0.5;">
+                            <p style="font-size: 0.7rem; font-weight: 800; margin-bottom: 25px;">${doc.label}</p>
+                            <div style="text-align: center; color: #ccc;">No Doc Uploaded</div>
+                        </div>
+                    `;
+                }
+            });
+
+            document.getElementById('btn-approve-app').onclick = () => appDecision(app.id, 'approved');
+            document.getElementById('btn-reject-app').onclick = () => appDecision(app.id, 'rejected');
+
+            document.getElementById('doc-modal').style.display = 'flex';
+        }
+
+        function closeDocModal() {
+            document.getElementById('doc-modal').style.display = 'none';
+        }
+
+        async function appDecision(appId, status) {
+            let note = '';
+            if (status === 'rejected') {
+                note = prompt('Enter rejection reason:');
+                if (note === null) return;
+                if (!note) { alert('Reason is required for rejection.'); return; }
+            } else {
+                if (!confirm('Authorize this Pilot? Moving to active fleet.')) return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications/decision`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ appId, status, note })
+                });
+
+                if (res.ok) {
+                    alert(`Application ${status}!`);
+                    closeDocModal();
+                    loadTabData('applications');
+                } else {
+                    const err = await res.json();
+                    alert('Decision Error: ' + err.error);
+                }
+            } catch (err) { alert('Signal failure.'); }
+        }
+
         // --- REPORTING LOGIC (CSV/PDF) ---
         function downloadCSV() {
             fetch(`${API_BASE_URL}/api/admin/bookings`)
@@ -1523,6 +1652,23 @@
         });
         setInterval(() => { loadTabData(_activeTab); }, 5000);
     </script>
+    <!-- Application Document Modal -->
+    <div id="doc-modal" class="map-modal" style="display: none;">
+        <div class="map-modal-content" style="max-width: 900px; width: 95%;">
+            <div class="map-header">
+                <h3>Document Verification</h3>
+                <button class="close-map" onclick="closeDocModal()">×</button>
+            </div>
+            <div id="doc-viewer-content" style="padding: 2rem; display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; max-height: 70vh; overflow-y: auto;">
+                <!-- Images loaded here -->
+            </div>
+            <div id="doc-footer" style="padding: 1.5rem; background: #f8f8f8; display: flex; justify-content: flex-end; gap: 1rem; border-top: 1px solid #eee;">
+                <button class="btn btn-primary" id="btn-approve-app" style="background: #2e7d32;">Approve Application</button>
+                <button class="btn btn-primary" id="btn-reject-app" style="background: #c62828;">Reject Application</button>
+            </div>
+        </div>
+    </div>
+
     <script src="alert.js"></script>
     <script>
         window.addEventListener('load', () => {

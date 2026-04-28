@@ -6,6 +6,12 @@
 
 // [IMPORTANT] Replace this with your actual live Railway project URL (e.g., https://myapp.up.railway.app)
 const PRODUCTION_URL = "https://cityride.up.railway.app";
-const API_BASE_URL = PRODUCTION_URL; // Locked to Production
+// Auto-detect Local vs Production environment
+const isLocal = window.location.hostname === "localhost" || 
+                window.location.hostname === "127.0.0.1" || 
+                window.location.hostname.startsWith("192.168.") || 
+                window.location.hostname.startsWith("10.");
 
-console.log("🚀 API Base Point set to:", API_BASE_URL);
+const API_BASE_URL = isLocal ? "" : PRODUCTION_URL;
+
+console.log("🚀 CityRide Engine - API Root:", API_BASE_URL || "Local Instance");
