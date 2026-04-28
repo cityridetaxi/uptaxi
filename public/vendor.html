@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityRideTaxi | Vendor Partner Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+        :root {
+            --partner-bg: #fdfdfd;
+            --partner-sidebar: #0a0a0a;
+        }
+        body { background: var(--partner-bg); display: flex; height: 100vh; overflow: hidden; }
+        .sidebar { width: 260px; background: var(--partner-sidebar); color: white; padding: 2rem; display: flex; flex-direction: column; flex-shrink:0; }
+        .sidebar .logo { margin-bottom: 3rem; }
+        .nav-item { padding: 1rem; margin-bottom: 0.5rem; border-radius: 12px; cursor: pointer; opacity: 0.7; transition: 0.3s; display: flex; align-items: center; gap: 10px; }
+        .nav-item:hover, .nav-item.active { opacity: 1; background: rgba(255,255,255,0.05); }
+        .nav-item.active { border-right: 4px solid var(--primary-red); color: var(--primary-red); opacity: 1; }
+        .main-stage { flex-grow: 1; padding: 3rem; overflow-y: auto; scroll-behavior: smooth; }
+        .text-accent { color: var(--primary-red); }
+        .vendor-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 3rem; }
+        .booking-card { background: white; border-radius: 24px; padding: 2.5rem; box-shadow: 0 10px 40px rgba(0,0,0,0.05); }
+        .markup-box { background: #fffbe6; border: 1px solid #ffe58f; padding: 1.5rem; border-radius: 12px; margin-top: 1.5rem; }
+        .markup-box h4 { margin: 0 0 0.5rem 0; color: #856404; font-size: 0.9rem; }
+        .markup-input-wrap { display: flex; align-items: center; gap: 1rem; }
+        .markup-input-wrap input { width: 120px; padding: 0.5rem; border: 1px solid #ddd; border-radius: 8px; font-weight: 700; font-size: 1.1rem; }
+        .fare-display { margin-top: 2rem; padding: 1.5rem; background: #f8f9fa; border-radius: 12px; border-left: 5px solid var(--primary-red); }
+        .fare-row { display: flex; justify-content: space-between; margin-bottom: 0.75rem; align-items: center; }
+        .fare-row.total { font-weight: 800; font-size: 1.5rem; border-top: 1px solid rgba(0,0,0,0.05); padding-top: 1.25rem; margin-top: 1.25rem; color: var(--primary-red); }
+        .history-table { width: 100%; border-collapse: collapse; margin-top: 2rem; }
+        .history-table th { text-align: left; padding: 1rem; color: #888; font-size: 0.8rem; text-transform: uppercase; border-bottom: 2px solid #eee; }
+        .history-table td { padding: 1rem; border-bottom: 1px solid #f5f5f5; font-size: 0.9rem; }
+
+        .grid-2 { 
+            display: grid; 
+            grid-template-columns: 1.2fr 0.8fr; 
+            gap: 2rem; 
+        }
+
+        .mobile-header { display: none; }
+        .burger-menu { display: none; }
+
+        /* --- RESPONSIVE COMMAND DECK --- */
+        @media (max-width: 1024px) {
+            body { flex-direction: column; overflow-y: auto; }
+            .sidebar {
+                position: fixed; left: -280px; top: 0; height: 100vh; z-index: 10000;
+                transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1); width: 280px;
+                background: var(--partner-sidebar); padding-top: 5rem;
+            }
+            .sidebar.active { left: 0; }
+            .mobile-header {
+                display: flex; background: var(--partner-sidebar); color: white;
+                padding: 1rem 2rem; justify-content: space-between; align-items: center;
+                position: sticky; top: 0; z-index: 9000;
+            }
+            .main-stage { padding: 1.5rem; overflow: visible; }
+            .grid-2 { grid-template-columns: 1fr !important; gap: 1.5rem; }
+            .booking-card { padding: 1.5rem; border-radius: 15px; }
+
+            .burger-menu {
+                display: flex; flex-direction: column; gap: 5px; cursor: pointer;
+                z-index: 10001; width: 44px; height: 44px; align-items: center; justify-content: center;
+            }
+            .burger-menu span { display: block; width: 25px; height: 2px; background: white; transition: 0.3s; border-radius: 2px; }
+            
+            .burger-menu.active span:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+            .burger-menu.active span:nth-child(2) { opacity: 0; }
+            .burger-menu.active span:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
+        }
+
+        @media (max-width: 480px) {
+            .vendor-header h1 { font-size: 1.5rem; }
+            .form-grid { grid-template-columns: 1fr !important; }
+            .markup-input-wrap input { width: 100%; }
+        }
+
+        /* Category Tabs */
+        .service-category-tabs { display: flex; gap: 10px; }
+        .category-btn {
+            background: #f0f0f0; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer;
+            font-weight: 600; color: #666; transition: 0.3s;
+        }
+        .category-btn.active { background: var(--primary-red); color: white; }
+
+        /* Vehicle Tiles */
+        .vehicle-card-item:hover { background: #f9f9f9; transform: translateY(-2px); }
+        .vehicle-card-item.selected { border-color: var(--primary-red) !important; background: rgba(183, 28, 28, 0.05); border-width: 2px !important; }
+        .vehicle-disabled { opacity: 0.5; pointer-events: none; grayscale: 1; }
+        
+        .map-picker-link { color: var(--primary-red); font-size: 0.75rem; font-weight: 700; cursor: pointer; text-decoration: underline; margin-left: 10px; }
+        
+        .suggestions { border: 1px solid #eee; background: white; max-height: 200px; overflow-y: auto; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.05); }
+    </style>
+</head>
+<body>
+    <div class="mobile-header">
+        <div class="logo" style="margin:0">
+            <img src="logo.png" alt="CityRideTaxi" style="height: 35px; width: auto;">
+        </div>
+        <div class="burger-menu" id="vendor-burger">
+            <span></span>
+            <span></span>
+            <span></span>
+        </div>
+    </div>
+
+    <aside class="sidebar" id="vendor-sidebar">
+        <div class="logo">
+            <img src="logo.png" alt="CityRide" style="height: 40px;">
+        </div>
+        <div style="flex-grow:1" class="sidebar-nav">
+            <div class="nav-item active" onclick="switchTab('booking', this)">📅 Book New Ride</div>
+            <div class="nav-item" onclick="switchTab('history', this)">📜 Partner History</div>
+            <div class="nav-item" onclick="switchTab('earnings', this)">💰 My Earnings</div>
+        </div>
+        <div class="nav-item" onclick="logoutVendor()">🚪 Exit Portal</div>
+    </aside>
+
+    <main class="main-stage">
+        <div id="booking-section" class="tab-content">
+            <div class="vendor-header">
+                <div>
+                    <h1>Partner <span class="text-accent">Booking Portal</span></h1>
+                    <p id="vendor-welcome">Welcome back, Partner.</p>
+                </div>
+            </div>
+
+            <div class="grid-2">
+                <div class="booking-card">
+                    <div class="service-category-tabs" style="margin-bottom: 2rem;">
+                        <button type="button" class="category-btn active" onclick="setCategory('local', this)">Local</button>
+                        <button type="button" class="category-btn" onclick="setCategory('outstation', this)">Outstation</button>
+                        <button type="button" class="category-btn" onclick="setCategory('rental', this)">Rental</button>
+                    </div>
+
+                    <div class="widget-form">
+                        <div class="form-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
+                            <div class="input-group" style="grid-column: span 2;">
+                                <label>
+                                    Pickup Location
+                                    <span class="map-picker-link" onclick="openMapPicker('pickup')">Pick on Map</span>
+                                </label>
+                                <input type="text" id="pickup" placeholder="Enter pickup address" required>
+                                <div id="pickup-suggestions" class="suggestions"></div>
+                            </div>
+                            <div class="input-group" style="grid-column: span 2;" id="destination-group">
+                                <label>
+                                    Destination
+                                    <span class="map-picker-link" onclick="openMapPicker('drop')">Pick on Map</span>
+                                </label>
+                                <input type="text" id="drop" placeholder="Enter destination" required>
+                                <div id="drop-suggestions" class="suggestions"></div>
+                            </div>
+                            <div class="input-group">
+                                <label>Departure Date</label>
+                                <input type="date" id="pickup-date" required>
+                            </div>
+                            <div class="input-group">
+                                <label>Departure Time</label>
+                                <input type="time" id="pickup-time" required>
+                            </div>
+                            
+                            <div class="input-group" id="return-date-group" style="display:none;">
+                                <label>Return Date</label>
+                                <input type="date" id="return-date">
+                            </div>
+                            
+                            <div class="input-group" id="rental-package-group" style="display:none;">
+                                <label>Rental Package</label>
+                                <select id="rental-package">
+                                    <option value="2-20">2 Hours | 20 KM</option>
+                                    <option value="4-40">4 Hours | 40 KM</option>
+                                    <option value="8-80" selected>8 Hours | 80 KM</option>
+                                    <option value="12-120">12 Hours | 120 KM</option>
+                                </select>
+                            </div>
+
+                            <div class="input-group">
+                                <label>Passengers</label>
+                                <select id="passengers">
+                                    <option value="1">1 Passenger</option>
+                                    <option value="2">2 Passengers</option>
+                                    <option value="3">3 Passengers</option>
+                                    <option value="4">4 Passengers</option>
+                                    <option value="5">5 Passengers</option>
+                                    <option value="6">6 Passengers</option>
+                                </select>
+                            </div>
+
+                            <div class="input-group">
+                                <label>Vehicle Preference</label>
+                                <select id="vehicle-type-select">
+                                    <option value="auto">Auto Select</option>
+                                    <option value="bike">Bike</option>
+                                    <option value="sedan" selected>Sedan</option>
+                                    <option value="suv">SUV</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div class="markup-box">
+                            <h4 style="display: flex; justify-content: space-between; align-items: center;">
+                                Vendor Profit Margin (Markup)
+                                <span id="markup-tag" style="background: var(--primary-red); color: white; padding: 2px 8px; border-radius: 4px; font-size: 0.7rem;">LOCKED</span>
+                            </h4>
+                            <div class="markup-input-wrap">
+                                <span style="font-size: 1.5rem; font-weight: 700;">₹</span>
+                                <input type="number" id="v-markup" value="100" min="0" oninput="calculateVendorFare()">
+                                <div style="font-size: 0.8rem; color: #666; margin-left: 10px;">
+                                    This amount is added to the base fare as your commission.
+                                </div>
+                            </div>
+                        </div>
+
+                        <div id="vehicle-selection-container" class="vehicle-options-grid" style="margin-top: 2rem;">
+                            <!-- Populated via JS -->
+                        </div>
+
+                        <button class="btn btn-large btn-submit" style="width:100%; margin-top:2rem; background: var(--primary-red); color: white;" onclick="handleVendorBooking()">Confirm Partner booking</button>
+                    </div>
+                </div>
+
+                <div class="booking-card" style="position: relative;">
+                    <button onclick="openRateChart()" style="position: absolute; top: 1rem; right: 1rem; background: none; border: 1px solid #ddd; padding: 5px 12px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; color: #888; cursor: pointer; transition: 0.3s;">📄 View Rate Chart</button>
+                    <h3>Quotation Summary</h3>
+                    <div id="vendor-fare-details" class="fare-display">
+                        <div class="fare-row">
+                            <span>Base Ride Fare:</span>
+                            <span id="base-fare-display">₹0.00</span>
+                        </div>
+                        <div class="fare-row" style="color: #28a745;">
+                            <span>Partner Profit:</span>
+                            <span id="profit-display">+ ₹100.00</span>
+                        </div>
+                        <div class="fare-row total">
+                            <span>Total (Customer Pays):</span>
+                            <span id="total-fare-display">₹100.00</span>
+                        </div>
+                    </div>
+                    
+                    <div style="margin-top: 2rem;">
+                        <div style="font-weight: 700; font-size: 0.9rem; margin-bottom: 1rem; color: var(--text-muted); text-transform: uppercase;">Mission Parameters</div>
+                        <div id="mission-params" style="display: grid; gap: 10px; font-size: 0.9rem;">
+                            <div style="display: flex; justify-content: space-between;"><span>Distance:</span> <b id="dist-display">0 KM</b></div>
+                            <div style="display: flex; justify-content: space-between;"><span>Trip Type:</span> <b id="type-display">One Way</b></div>
+                        </div>
+                    </div>
+
+                    <div style="margin-top:2rem; padding:1.5rem; background: rgba(0,0,0,0.02); border-radius:12px; border:1px dashed #ddd;">
+                        <p style="font-size:0.8rem; color:#888; font-style:italic">
+                            * Note: Drivers will only see and receive the Base Ride Fare. The profit margin is credited to your partner account upon ride completion.
+                        </p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Rate Chart Modal -->
+        <div id="rate-modal" class="map-modal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 20000; align-items: center; justify-content: center;">
+            <div class="map-modal-content" style="background: white; width: 95%; max-width: 900px; border-radius: 20px; overflow: hidden; max-height: 90vh; display: flex; flex-direction: column;">
+                <div class="map-header" style="padding: 1.5rem; display: flex; justify-content: space-between; border-bottom: 1px solid #eee;">
+                    <h3>Partner <span class="text-accent">Rate Sheet</span> (Reference Only)</h3>
+                    <button onclick="closeRateChart()" style="background:none; border:none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+                </div>
+                <div style="padding: 2rem; overflow-y: auto;">
+                    <table class="history-table" style="margin-top:0">
+                        <thead>
+                            <tr>
+                                <th>Category</th>
+                                <th>Sedan (Rate)</th>
+                                <th>SUV (Rate)</th>
+                                <th>Bike (Rate)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><b>Local (Base Fare)</b></td>
+                                <td>₹250 (Incl 10KM)</td>
+                                <td>₹350 (Incl 10KM)</td>
+                                <td>₹50 (Incl 4KM)</td>
+                            </tr>
+                            <tr>
+                                <td><b>Local (Per KM)</b></td>
+                                <td>₹25 / KM</td>
+                                <td>₹35 / KM</td>
+                                <td>₹10 / KM</td>
+                            </tr>
+                            <tr>
+                                <td><b>One-Way Outstation</b></td>
+                                <td>₹13 / KM (Min 130KM)</td>
+                                <td>₹19 / KM (Min 130KM)</td>
+                                <td>₹10 / KM</td>
+                            </tr>
+                            <tr>
+                                <td><b>Round-Trip</b></td>
+                                <td>₹12 / KM (Min 250KM/day)</td>
+                                <td>₹18 / KM (Min 250KM/day)</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td><b>Driver Bata</b></td>
+                                <td>₹400 / Day</td>
+                                <td>₹500 / Day</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td><b>Rental (2Hr/20KM)</b></td>
+                                <td>₹600</td>
+                                <td>₹900</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td><b>Rental (4Hr/40KM)</b></td>
+                                <td>₹1100</td>
+                                <td>₹1600</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td><b>Rental (8Hr/80KM)</b></td>
+                                <td>₹2100</td>
+                                <td>₹3100</td>
+                                <td>-</td>
+                            </tr>
+                            <tr>
+                                <td><b>Rental (12Hr/120KM)</b></td>
+                                <td>₹2800</td>
+                                <td>₹4200</td>
+                                <td>-</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    
+                    <div style="margin-top: 2rem; background: #fffbe6; padding: 1.5rem; border-radius: 12px; border: 1px solid #ffe58f;">
+                        <h4 style="color:#856404; margin-bottom: 0.5rem;">Important Calculation Rules:</h4>
+                        <ul style="font-size: 0.85rem; color: #666; padding-left: 1.2rem;">
+                            <li>GST (5%) is added to the base ride fare automatically.</li>
+                            <li><b>Dynamic Surge (Morning/Evening):</b> Applies to Local rides. 
+                                <br>• Morning: 8 AM (5%) to 10 AM (25%), then normal by 11 AM.
+                                <br>• Evening: 4 PM (5%) to 6 PM (25%), then normal by 9 PM.</li>
+                            <li>For Outstation One-Way, a flat convenience fee of ₹400 is added in lieu of return travel for both Sedan and SUV.</li>
+                            <li>For Round-Trips, multiple day calculations apply min 250KM per calendar day plus daily Driver Bata.</li>
+                            <li>Rental packages extra fees vary by tier. Base extra is ₹18/KM & ₹150/Hr (Sedan) dropping to ₹15/KM & ₹120/Hr for longer tiers. SUV base extra is ₹25/KM & ₹250/Hr dropping to ₹20/KM & ₹200/Hr.</li>
+                            <li>Markup is strictly your profit and does not incur company commission.</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="history-section" class="tab-content" style="display:none">
+            <h1>Partner <span class="text-accent">Missions</span></h1>
+            <div class="booking-card" style="margin-top:2rem">
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>Mission ID</th>
+                            <th>Route & Assignment</th>
+                            <th>Original Fare</th>
+                            <th>Your Profit</th>
+                            <th>Total Charged</th>
+                            <th>OTP</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+                    <tbody id="vendor-history-body"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div id="earnings-section" class="tab-content" style="display:none">
+            <h1>Partner <span class="text-accent">Earnings</span></h1>
+            <div class="stats-grid" style="margin-top:2rem">
+                <div class="stat-card">
+                    <h4>Total Profit Locked</h4>
+                    <span class="value" id="vendor-total-earned">₹0.00</span>
+                    <p>Accumulated from all completed missions.</p>
+                </div>
+                <div class="stat-card">
+                    <h4>Current Markup</h4>
+                    <span class="value">₹100.00</span>
+                    <p>Current setting for new bookings.</p>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Map Picker Modal -->
+    <div id="map-modal" class="map-modal" style="display:none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 20000; align-items: center; justify-content: center;">
+        <div class="map-modal-content" style="background: white; width: 90%; max-width: 800px; border-radius: 20px; overflow: hidden;">
+            <div class="map-header" style="padding: 1.5rem; display: flex; justify-content: space-between; border-bottom: 1px solid #eee;">
+                <h3>Select <span id="picking-type">pickup</span> on Map</h3>
+                <button onclick="closeMapPicker()" style="background:none; border:none; font-size: 1.5rem; cursor: pointer;">&times;</button>
+            </div>
+            <div id="map-picker" style="height: 450px; width: 100%;"></div>
+            <div class="map-footer" style="padding: 1.5rem; text-align: right; background: #f9f9f9;">
+                <button id="confirm-location" class="btn btn-primary" style="display:none;" onclick="confirmMapPoint()">Confirm Location</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Standalone logic for Vendor Dashboard -->
+    <script>
+        const VEHICLE_ICONS = {
+            bike: `<svg viewBox="0 0 24 24"><path d="M15.5,5.5L11,9.48V7h-1v3.12l-4.5,3.98l0.66,0.75L10,11.53V15H9v1h5v-1h-1v-3.47l3.84,3.39l0.66-0.75L13.1,10.7l0.13-0.12 c0.37-0.34,0.6-0.81,0.6-1.34c0-0.54-0.24-1.03-0.62-1.37L15.5,5.5z M12.5,9.22l-0.5,0.44l-0.5-0.44V8.5h1V9.22z M12.5,13.78l1.5-1.32 v1.32H12.5z M18.5,14c-1.38,0-2.5,1.12-2.5,2.5s1.12,2.5,2.5,2.5s2.5-1.12,2.5-2.5S19.88,14,18.5,14z M18.5,18c-0.83,0-1.5-0.67-1.5-1.5 s0.67-1.5,1.5-1.5s1.5,0.67,1.5,1.5S19.33,18,18.5,18z M5.5,14c-1.38,0-2.5,1.12-2.5,2.5s1.12,2.5,2.5,2.5s2.5-1.12,2.5-2.5 S6.88,14,5.5,14z M5.5,18C4.67,18,4,17.33,4,16.5S4.67,15,5.5,15s1.5,0.67,1.5,1.5S6.33,18,5.5,18z"/></svg>`,
+            sedan: `<svg viewBox="0 0 24 24"><path d="M18.92,6.01C18.72,5.42,18.16,5,17.5,5h-11c-0.66,0-1.21,0.42-1.42,1.01L3,12v8c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-1 h12v1c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-8L18.92,6.01z M6.5,16c-0.83,0-1.5-0.67-1.5-1.5S5.67,13,6.5,13s1.5,0.67,1.5,1.5 S7.33,16,6.5,16z M17.5,16c-0.83,0-1.5-0.67-1.5-1.5s0.67-1.5,1.5-1.5s1.5,0.67,1.5,1.5S18.33,16,17.5,16z M5,11l1.5-4.5h11L19,11H5z"/></svg>`,
+            suv: `<svg viewBox="0 0 24 24"><path d="M17,11l-1.5-4.5h-7L7,11H17z M18.92,6.01C18.72,5.42,18.16,5,17.5,5h-11c-0.66,0-1.21,0.42-1.42,1.01L3,12v8 c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-1h12v1c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-8L18.92,6.01z"/></svg>`
+        };
+
+        const pricing = {
+            bike: {
+                name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1,
+                local: { base: 50, perKm: 10, minKm: 4 },
+                oneway: { base: 140, perKm: 10, minKm: 4, convenience: 0 },
+                round: null, rental: null
+            },
+            sedan: {
+                name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4,
+                local: { base: 250, perKm: 25, minKm: 10 },
+                oneway: { base: 0, perKm: 13, minKm: 130, convenience: 400 },
+                round: { base: 0, perKm: 12, minKmPerDay: 250, driverAllowance: 400 },
+                rental: { 
+                    '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
+                    '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
+                    '8-80': { base: 2100, extraKm: 16, extraHour: 120 }, 
+                    '12-120': { base: 2800, extraKm: 15, extraHour: 120 } 
+                }
+            },
+            suv: {
+                name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6,
+                local: { base: 350, perKm: 35, minKm: 10 },
+                oneway: { base: 0, perKm: 19, minKm: 130, convenience: 400 },
+                round: { base: 0, perKm: 18, minKmPerDay: 250, driverAllowance: 500 },
+                rental: { 
+                    '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
+                    '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
+                    '8-80': { base: 3100, extraKm: 22, extraHour: 200 }, 
+                    '12-120': { base: 4200, extraKm: 20, extraHour: 200 } 
+                }
+            }
+        };
+
+        // UI Controls
+        function openRateChart() { document.getElementById('rate-modal').style.display = 'flex'; }
+        function closeRateChart() { document.getElementById('rate-modal').style.display = 'none'; }
+
+        // Check Auth
+        const vendorData = JSON.parse(localStorage.getItem('cityride_vendor'));
+        if (!vendorData) window.location.href = 'vendor-login.html';
+
+        document.getElementById('vendor-welcome').textContent = `Welcome back, ${vendorData.business_name} (${vendorData.name})`;
+
+        // State Tracking
+        let currentCategory = 'local';
+        let currentDistance = 0;
+        let selectedVehicle = null;
+        let selectedFare = 0;
+
+        // Date Restrictions
+        const todayStr = new Date().toISOString().split('T')[0];
+        document.getElementById('pickup-date').setAttribute('min', todayStr);
+        document.getElementById('pickup-date').value = todayStr;
+        if (document.getElementById('return-date')) document.getElementById('return-date').setAttribute('min', todayStr);
+
+        function setCategory(cat, el) {
+            currentCategory = cat;
+            document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+            if(el) el.classList.add('active');
+
+            document.getElementById('destination-group').style.display = cat === 'rental' ? 'none' : 'flex';
+            document.getElementById('return-date-group').style.display = 'none'; // Only shows if vehicle selected for round
+            document.getElementById('rental-package-group').style.display = cat === 'rental' ? 'flex' : 'none';
+            
+            calculateVendorFare();
+        }
+
+        async function updateDistance() {
+            const pickup = document.getElementById('pickup').dataset.coords;
+            const drop = document.getElementById('drop').dataset.coords;
+
+            if (currentCategory === 'rental') {
+                currentDistance = 0;
+                return;
+            }
+
+            if (pickup && drop) {
+                try {
+                    const res = await fetch(`https://router.project-osrm.org/route/v1/driving/${pickup};${drop}?overview=false`);
+                    const data = await res.json();
+                    if (data.routes && data.routes[0]) {
+                        currentDistance = Math.ceil(data.routes[0].distance / 1000);
+                    }
+                } catch (e) { currentDistance = 15; } // Fallback
+            }
+        }
+
+        async function calculateVendorFare() {
+            const pickup = document.getElementById('pickup').dataset.coords;
+            const drop = document.getElementById('drop').dataset.coords;
+            const container = document.getElementById('vehicle-selection-container');
+
+            // Location Validation
+            if (!pickup || (currentCategory !== 'rental' && !drop)) {
+                container.innerHTML = '<div style="text-align:center; padding:2rem; color:#888; background:rgba(0,0,0,0.02); border-radius:12px; border:1px dashed #ddd;">Select pickup & drop locations to view vehicle options</div>';
+                document.getElementById('dist-display').textContent = '0 KM';
+                return;
+            }
+
+            await updateDistance();
+            
+            // Update distance display immediately
+            document.getElementById('dist-display').textContent = currentCategory === 'rental' ? 'N/A' : `${currentDistance} KM`;
+            document.getElementById('type-display').textContent = currentCategory.toUpperCase();
+
+            const passengers = parseInt(document.getElementById('passengers').value);
+            container.innerHTML = '';
+
+            const markup = parseFloat(document.getElementById('v-markup').value || 0);
+            
+            // For Round Trip Days
+            const start = new Date(document.getElementById('pickup-date').value);
+            const end = new Date(document.getElementById('return-date').value || start);
+            const tripDays = Math.max(1, Math.ceil(Math.abs(end - start) / (1000 * 60 * 60 * 24)) + 1);
+
+            const types = currentCategory === 'outstation' ? ['oneway', 'round'] : [currentCategory];
+
+            types.forEach(tType => {
+                Object.keys(pricing).forEach(vType => {
+                    const info = pricing[vType];
+                    const config = info[tType];
+                    if (!config) return;
+
+                    let baseFare = 0;
+                    let peakLabel = '';
+
+                    const getPeakSurcharge = (timeStr) => {
+                        if (!timeStr) return 0;
+                        const [h, m] = timeStr.split(':').map(Number);
+                        const tm = h * 60 + m;
+                        // Morning Peak: 8:00 AM - 11:00 AM (Dynamic)
+                        if (tm >= 480 && tm < 600) { // 8 AM to 10 AM (Step up 5% every 30m)
+                            const steps = Math.floor((tm - 480) / 30);
+                            return 0.05 + (steps * 0.05); 
+                        }
+                        if (tm >= 600 && tm < 660) { // 10 AM to 11 AM (Step down)
+                            const steps = Math.floor((tm - 600) / 30);
+                            return 0.25 - (steps * 0.125); 
+                        }
+                        // Evening Peak: 4:00 PM - 9:00 PM (Dynamic)
+                        if (tm >= 960 && tm < 1080) { // 4 PM to 6 PM (Step up 5% every 30m)
+                            const steps = Math.floor((tm - 960) / 30);
+                            return 0.05 + (steps * 0.05); 
+                        }
+                        if (tm >= 1080 && tm < 1260) { // 6 PM to 9 PM (Step down every 30m)
+                            const steps = Math.floor((tm - 1080) / 30);
+                            const surcharge = 0.25 - (steps * 0.05); 
+                            return Math.max(0, surcharge);
+                        }
+                        return 0;
+                    };
+
+                    const peakMult = currentCategory === 'local' ? getPeakSurcharge(document.getElementById('pickup-time').value) : 0;
+
+                    if (tType === 'local') {
+                        const extraKm = Math.max(0, currentDistance - config.minKm);
+                        const baseCharge = config.base + (extraKm * config.perKm);
+                        const peakCharge = baseCharge * peakMult;
+                        if (peakMult > 0) peakLabel = ` [Peak +${Math.round(peakMult*100)}%]`;
+                        
+                        const minBill = vType === 'suv' ? 300 : (vType === 'sedan' ? 200 : 50);
+                        baseFare = Math.max(minBill, baseCharge + peakCharge);
+                    } else if (tType === 'oneway') {
+                        const billableKm = Math.max(currentDistance, 130);
+                        baseFare = (billableKm * config.perKm) + config.convenience;
+                    } else if (tType === 'round') {
+                        const billableKm = Math.max(currentDistance * 2, 250, config.minKmPerDay * tripDays);
+                        baseFare = (billableKm * config.perKm) + (config.driverAllowance * tripDays);
+                    } else if (tType === 'rental') {
+                        const pkg = document.getElementById('rental-package').value;
+                        baseFare = info.rental[pkg].base;
+                    }
+
+                    baseFare = Math.ceil(baseFare * 1.05); // Incl GST
+                    const totalFare = baseFare + markup;
+                    const isDisabled = passengers > info.maxPassengers;
+
+                    const card = document.createElement('div');
+                    const isSelected = selectedVehicle === `${vType}_${tType}`;
+                    card.className = `vehicle-card-item ${isDisabled ? 'vehicle-disabled' : ''} ${isSelected ? 'selected' : ''}`;
+                    card.style = `border: 1px solid #eee; padding: 1rem; border-radius: 12px; cursor: pointer; display: flex; align-items: center; justify-content: space-between; margin-bottom: 0.5rem; transition: 0.3s;`;
+
+                    card.innerHTML = `
+                        <div style="display:flex; align-items:center; gap:15px;">
+                            <div style="width:40px; height:40px;">${VEHICLE_ICONS[vType]}</div>
+                            <div>
+                                <div style="font-weight:700;">${info.name} (${tType.toUpperCase()})${peakLabel}</div>
+                                <div style="font-size:0.75rem; color:#666;">Base: ₹${baseFare} | Markup: ₹${markup}</div>
+                            </div>
+                        </div>
+                        <div style="text-align:right;">
+                            <div style="font-weight:800; color:var(--primary-red); font-size:1.1rem;">₹${totalFare}</div>
+                            <div style="font-size:0.7rem; color:#888;">Customer Pays</div>
+                        </div>
+                    `;
+
+                    if (!isDisabled) {
+                        card.onclick = () => {
+                            selectedVehicle = `${vType}_${tType}`;
+                            
+                            const vtSelect = document.getElementById('vehicle-type-select');
+                            if (vtSelect) vtSelect.value = vType;
+
+                            document.getElementById('base-fare-display').textContent = `₹${baseFare.toFixed(2)}`;
+                            document.getElementById('profit-display').textContent = `+ ₹${markup.toFixed(2)}`;
+                            document.getElementById('total-fare-display').textContent = `₹${totalFare.toFixed(2)}`;
+                            document.getElementById('dist-display').textContent = currentCategory === 'rental' ? 'N/A' : `${currentDistance} KM`;
+                            document.getElementById('type-display').textContent = tType.toUpperCase();
+                            
+                            document.getElementById('return-date-group').style.display = tType === 'round' ? 'flex' : 'none';
+                            
+                            calculateVendorFare(); // Refresh list to show selection
+                        };
+                    }
+                    container.appendChild(card);
+                });
+            });
+        }
+
+        // --- Autocomplete Logic ---
+        function setupAutocomplete(inputId, boxId) {
+            const input = document.getElementById(inputId);
+            const box = document.getElementById(boxId);
+            let timeout;
+
+            input.addEventListener('input', () => {
+                clearTimeout(timeout);
+                if (input.value.length < 3) return box.innerHTML = '';
+                timeout = setTimeout(async () => {
+                    try {
+                        const res = await fetch(`https://photon.komoot.io/api/?q=${input.value}&limit=5`, {
+                            method: 'GET',
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        if (!res.ok) throw new Error('Photon failure');
+                        const data = await res.json();
+                        box.innerHTML = '';
+                        data.features.forEach(f => {
+                            const p = f.properties;
+                            const label = [p.name, p.city, p.state].filter(Boolean).join(', ');
+                            const div = document.createElement('div');
+                            div.className = 'suggestion-item';
+                            div.style = 'padding:10px; cursor:pointer; border-bottom:1px solid #f0f0f0;';
+                            div.textContent = label;
+                            div.onclick = () => {
+                                input.value = label;
+                                input.dataset.coords = f.geometry.coordinates.join(',');
+                                box.innerHTML = '';
+                                calculateVendorFare();
+                            };
+                            box.appendChild(div);
+                        });
+                    } catch (e) {
+                        console.warn("Autocomplete fetch failed", e);
+                        box.innerHTML = '<div style="padding:10px; color:#999; font-size:0.8rem;">Search unavailable. Try manual pick.</div>';
+                    }
+                }, 400);
+            });
+        }
+
+        setupAutocomplete('pickup', 'pickup-suggestions');
+        setupAutocomplete('drop', 'drop-suggestions');
+
+        // Trigger updates on change
+        ['passengers', 'pickup-date', 'pickup-time', 'return-date', 'rental-package', 'vehicle-type-select'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('change', () => calculateVendorFare());
+        });
+
+        // --- Map Picker ---
+        let map, marker;
+        let pickingFor = 'pickup';
+
+        function openMapPicker(type) {
+            pickingFor = type;
+            document.getElementById('map-modal').style.display = 'flex';
+            document.getElementById('picking-type').textContent = type;
+            if (!map) {
+                map = L.map('map-picker').setView([13.0827, 80.2707], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+                map.on('click', e => {
+                    if (marker) map.removeLayer(marker);
+                    marker = L.marker(e.latlng).addTo(map);
+                    document.getElementById('confirm-location').style.display = 'block';
+                    marker.tempCoords = `${e.latlng.lng},${e.latlng.lat}`;
+                });
+            } else {
+                setTimeout(() => map.invalidateSize(), 200);
+            }
+        }
+
+        function closeMapPicker() { document.getElementById('map-modal').style.display = 'none'; }
+
+        async function confirmMapPoint() {
+            const coords = marker.tempCoords;
+            const input = document.getElementById(pickingFor);
+            input.dataset.coords = coords;
+            
+            // Reverse geocode with fallback
+            try {
+                const [lng, lat] = coords.split(',');
+                const res = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`, {
+                    method: 'GET',
+                    headers: { 'Accept': 'application/json' }
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data.features && data.features[0]) {
+                        const p = data.features[0].properties;
+                        input.value = [p.name, p.district, p.city].filter(Boolean).join(', ');
+                    } else {
+                        input.value = `Selected Point (${lat.substring(0,7)}, ${lng.substring(0,7)})`;
+                    }
+                } else {
+                    input.value = `Selected Point (${coords})`;
+                }
+            } catch (e) {
+                console.warn("Reverse geocode failed, using coordinates as label");
+                input.value = `Selected Point (${coords})`;
+            }
+            
+            closeMapPicker();
+            calculateVendorFare();
+        }
+
+        async function handleVendorBooking() {
+            if (!selectedVehicle) return alert('Please select a vehicle type.');
+            
+            const markup = parseFloat(document.getElementById('v-markup').value || 0);
+            const baseFareText = document.getElementById('base-fare-display').textContent;
+            
+            const bookingData = {
+                vendorId: vendorData.id,
+                vendorMarkup: markup,
+                pickup: document.getElementById('pickup').value,
+                pickupCoords: document.getElementById('pickup').dataset.coords,
+                drop: document.getElementById('drop').value,
+                dropCoords: document.getElementById('drop').dataset.coords,
+                date: document.getElementById('pickup-date').value,
+                time: document.getElementById('pickup-time').value,
+                vehicle: selectedVehicle.split('_')[0], // Extract 'sedan' from 'sedan_local'
+                fare: baseFareText, // Store Base Fare here so Drivers see this
+                distance: document.getElementById('dist-display').textContent,
+                tripType: document.getElementById('type-display').textContent.toLowerCase(),
+                passengers: document.getElementById('passengers').value
+            };
+
+            if (!bookingData.pickup || (!bookingData.drop && currentCategory !== 'rental')) {
+                return alert('Please enter locations.');
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/bookings/create`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(bookingData)
+                });
+                if (res.ok) {
+                    const result = await res.json();
+                    alert(`Mission Dispatched Successfully!\nBooking ID: #B${result.bookingId}\nMarkup Locked: ₹${markup}\nOTP for Ride Completion: ${result.journeyOtp}`);
+                    window.location.reload();
+                }
+            } catch (err) { alert('Dispatcher Error'); }
+        }
+
+        async function loadVendorHistory() {
+            try {
+                // Since there's no specific vendor history endpoint yet, we fetch all and filter or use a new one
+                // For now, let's assume we need to fetch from a vendor-specific endpoint if available, 
+                // or the admin endpoint with a filter.
+                // Reusing server's existing structure:
+                const res = await fetch(`${API_BASE_URL}/api/admin/bookings`); // If vendor can't access this, we need a specialized one
+                // Actually, let's add a vendor history endpoint in server.js later if needed.
+                // For now, fetch and filter:
+                const bookings = await res.json();
+                const myBookings = bookings.filter(b => b.vendor_id == vendorData.id);
+                
+                const body = document.getElementById('vendor-history-body');
+                body.innerHTML = '';
+                let totalEarnings = 0;
+                myBookings.forEach(b => {
+                    let driverDetails = '<div style="font-size:0.8rem; color:var(--text-muted); margin-top:0.4rem;">Awaiting Assignment...</div>';
+                    if (b.driver_name) {
+                        driverDetails = `
+                            <div style="font-weight:600; color:var(--primary-red); margin-top:0.4rem;">Pilot: ${b.driver_name}</div>
+                            <div style="font-size:0.75rem;">${b.car_model || 'Premium'} (${b.car_number || 'TBD'})</div>
+                            <div style="font-size:0.75rem;"><a href="tel:${b.driver_phone || ''}" style="color:var(--primary-red); text-decoration:none;">${b.driver_phone || 'N/A'}</a></div>
+                        `;
+                    }
+
+                    const row = `<tr>
+                        <td>#B${b.id}</td>
+                        <td>
+                            <div style="margin-bottom:0.4rem;">
+                                <div style="font-size:0.75rem; font-weight:700; color:#666;">Route:</div>
+                                <div>${b.pickup_loc.split(',')[0]} <span style="color:#aaa;">→</span> ${b.drop_loc.split(',')[0]}</div>
+                            </div>
+                            <div style="margin-bottom:0.4rem;">
+                                <div style="font-size:0.75rem; font-weight:700; color:#666;">Customer:</div>
+                                <div>👤 ${b.customer_name || 'Walk-in'} <a href="tel:${b.customer_phone || ''}" style="color:var(--primary-red); text-decoration:none;">${b.customer_phone || ''}</a></div>
+                            </div>
+                            <div style="border-top:1px dashed #eee; padding-top:0.3rem;">
+                                ${driverDetails}
+                            </div>
+                        </td>
+                        <td>${b.fare}</td>
+                        <td style="color:#28a745; font-weight:700;">₹${b.vendor_markup}</td>
+                        <td>₹${ (parseFloat(b.fare.replace(/[^0-9.]/g,'')) || 0) + parseFloat(b.vendor_markup) }</td>
+                        <td style="font-weight:bold; color:var(--primary-red); letter-spacing:1px">${b.journey_otp || 'N/A'}</td>
+                        <td><span class="status-pill status-${b.status}">${b.status}</span></td>
+                    </tr>`;
+                    body.innerHTML += row;
+                    if (b.status === 'completed') totalEarnings += parseFloat(b.vendor_markup);
+                });
+                document.getElementById('vendor-total-earned').textContent = `₹${totalEarnings.toFixed(2)}`;
+            } catch (e) { console.error(e); }
+        }
+        
+        // Initial load
+        setCategory('local');
+
+        // Restore missing core functions
+        const burger = document.getElementById('vendor-burger');
+        const sidebar = document.getElementById('vendor-sidebar');
+
+        if (burger) {
+            burger.addEventListener('click', () => {
+                burger.classList.toggle('active');
+                sidebar.classList.toggle('active');
+            });
+        }
+
+        function switchTab(tabId, el) {
+            document.querySelectorAll('.tab-content').forEach(t => t.style.display = 'none');
+            const target = document.getElementById(tabId + '-section');
+            if (target) target.style.display = 'block';
+            
+            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+            if (el) el.classList.add('active');
+            
+            if (window.innerWidth <= 1024 && burger && sidebar) {
+                burger.classList.remove('active');
+                sidebar.classList.remove('active');
+            }
+            
+            if (tabId === 'history') loadVendorHistory();
+        }
+
+        function logoutVendor() {
+            localStorage.removeItem('cityride_vendor');
+            window.location.href = 'vendor-login.html';
+        }
+    </script>
+</body>
+</html>

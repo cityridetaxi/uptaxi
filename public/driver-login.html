@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityRideTaxi | Driver Login</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
+    <style>
+        .auth-container {
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(rgba(0, 0, 0, 0.8), rgba(0, 0, 0, 0.8)), #1a1c1e;
+            padding: 2rem;
+        }
+
+        .auth-card {
+            background: rgba(26, 28, 30, 0.95);
+            backdrop-filter: blur(20px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 4rem;
+            border-radius: 30px;
+            width: 100%;
+            max-width: 500px;
+            box-shadow: var(--shadow-lg);
+            color: white;
+        }
+
+        .auth-card label {
+            color: rgba(255, 255, 255, 0.7);
+        }
+
+        .auth-card input {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .auth-card input::placeholder {
+            color: rgba(255, 255, 255, 0.3);
+        }
+
+        .partner-badge {
+            display: inline-block;
+            background: var(--primary-red);
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            font-size: 0.7rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+        }
+    </style>
+</head>
+
+<body style="overflow: hidden;"> <!-- Lock scroll during splash -->
+    <div id="splash-screen" style="z-index: 10000;">
+        <div class="splash-grid"></div>
+        <div class="splash-orb"></div>
+        <div class="splash-ring"></div>
+        <div class="splash-ring splash-ring-2"></div>
+        <div class="splash-logo-wrap">
+            <img src="logo.png" class="splash-logo" alt="CityRideTaxi">
+            <div class="splash-brand"><span>CityRide</span>Taxi</div>
+            <div class="splash-tagline">Premium Cab Booking</div>
+        </div>
+        <div class="splash-road-wrap">
+            <div class="splash-road"></div>
+            <svg class="splash-car" width="64" height="28" viewBox="0 0 64 28" fill="none">
+                <rect x="8" y="12" width="48" height="12" rx="4" fill="#dc143c"/>
+                <path d="M18 12 L22 4 L42 4 L46 12Z" fill="#c01030"/>
+                <rect x="23" y="5" width="8" height="6" rx="1" fill="rgba(150,220,255,0.7)"/>
+                <rect x="33" y="5" width="8" height="6" rx="1" fill="rgba(150,220,255,0.7)"/>
+                <circle cx="18" cy="24" r="4" fill="#1a1a1a" stroke="#555" stroke-width="1.5"/>
+                <circle cx="18" cy="24" r="1.5" fill="#888"/>
+                <circle cx="46" cy="24" r="4" fill="#1a1a1a" stroke="#555" stroke-width="1.5"/>
+                <circle cx="46" cy="24" r="1.5" fill="#888"/>
+                <ellipse cx="57" cy="16" rx="5" ry="3" fill="rgba(255,220,100,0.5)"/>
+                <rect x="54" y="14" width="3" height="4" rx="1" fill="#ffd700"/>
+            </svg>
+        </div>
+        <div class="splash-progress-wrap"><div class="splash-progress-bar"></div></div>
+        <div class="splash-status">Dispatching Systems…</div>
+    </div>
+    <div class="auth-container">
+        <div class="auth-card">
+            <div class="partner-badge">Partner Portal</div>
+            <div class="logo" style="margin-bottom: 3rem; text-align: left; cursor: pointer;" onclick="window.location.href='index.html'">
+                <img src="logo.png" alt="CityRideTaxi" style="height: 50px; width: auto;">
+            </div>
+
+            <h2 style="margin-bottom: 2rem; font-weight: 700;">Partner Driver Login</h2>
+
+            <form id="driver-login-form">
+                <div class="input-group">
+                    <label>Partner Email</label>
+                    <input type="email" id="login-email" placeholder="driver@cityridetaxi.com" required>
+                </div>
+                <div class="input-group">
+                    <label>Access Key</label>
+                    <input type="password" id="login-password" placeholder="••••••••" required>
+                </div>
+                <button type="submit" class="btn btn-primary btn-large" style="width: 100%;">Initialize Session</button>
+            </form>
+
+            <div style="margin-top: 2rem; text-align: center; font-size: 0.85rem; color: rgba(255,255,255,0.4);">
+                Not a partner yet? Contact our CityRideTaxi Fleet Management.
+            </div>
+
+            <div style="margin-top: 3rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;">
+                <a href="index.html" class="btn-back" style="color:white" title="Return to Main Hub">←</a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('driver-login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const password = document.getElementById('login-password').value;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, password })
+                });
+
+                const result = await res.json();
+
+                if (res.ok) {
+                    localStorage.setItem('cityride_pilot', JSON.stringify(result.user));
+                    window.location.href = 'driver.html';
+                } else {
+                    alert(result.error);
+                }
+            } catch (err) {
+                alert('Authorization failed');
+            }
+        });
+    </script>
+    <script>
+        window.addEventListener('load', () => {
+            const splash = document.getElementById('splash-screen');
+            if (splash) {
+                setTimeout(() => {
+                    splash.classList.add('splash-hidden');
+                    document.body.style.setProperty('overflow', 'auto', 'important');
+                }, 3200);
+            }
+        });
+    </script>
+    <script src="alert.js"></script>
+</body>
+
+</html>

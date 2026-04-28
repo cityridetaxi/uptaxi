@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityRideTaxi | Premium Cab Booking Service</title>
+    <meta name="description"
+        content="Book professional 5-seater and 7-seater cabs. Real-time fare calculation, professional drivers, and scheduled reservations.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: gap: https://ssl.gstatic.com 'unsafe-eval' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https://*.tile.openstreetmap.org https://unpkg.com; script-src 'self' 'unsafe-inline' https://unpkg.com; connect-src 'self' https://*.railway.app https://photon.komoot.io https://router.project-osrm.org https://unpkg.com;">
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+</head>
+
+<body style="overflow: hidden;"> <!-- Lock scroll during splash -->
+    <div id="splash-screen">
+        <div class="splash-grid"></div>
+        <div class="splash-orb"></div>
+        <div class="splash-ring"></div>
+        <div class="splash-ring splash-ring-2"></div>
+        <div class="splash-logo-wrap">
+            <img src="logo.png" class="splash-logo" alt="CityRideTaxi">
+            <div class="splash-brand"><span>CityRide</span>Taxi</div>
+            <div class="splash-tagline">Premium Cab Booking</div>
+        </div>
+        <div class="splash-road-wrap">
+            <div class="splash-road"></div>
+            <svg class="splash-car" width="64" height="28" viewBox="0 0 64 28" fill="none">
+                <rect x="8" y="12" width="48" height="12" rx="4" fill="#dc143c"/>
+                <path d="M18 12 L22 4 L42 4 L46 12Z" fill="#c01030"/>
+                <rect x="23" y="5" width="8" height="6" rx="1" fill="rgba(150,220,255,0.7)"/>
+                <rect x="33" y="5" width="8" height="6" rx="1" fill="rgba(150,220,255,0.7)"/>
+                <circle cx="18" cy="24" r="4" fill="#1a1a1a" stroke="#555" stroke-width="1.5"/>
+                <circle cx="18" cy="24" r="1.5" fill="#888"/>
+                <circle cx="46" cy="24" r="4" fill="#1a1a1a" stroke="#555" stroke-width="1.5"/>
+                <circle cx="46" cy="24" r="1.5" fill="#888"/>
+                <ellipse cx="57" cy="16" rx="5" ry="3" fill="rgba(255,220,100,0.5)"/>
+                <rect x="54" y="14" width="3" height="4" rx="1" fill="#ffd700"/>
+            </svg>
+        </div>
+        <div class="splash-progress-wrap"><div class="splash-progress-bar"></div></div>
+        <div class="splash-status">Dispatching Systems…</div>
+    </div>
+
+    <main>
+        <section id="home" class="hero">
+            <div class="hero-bg"></div>
+            <div class="container hero-content">
+                <div class="hero-text">
+                    <div class="hero-logo-box">
+                        <img src="logo.png" alt="CityRideTaxi">
+                    </div>
+                    <h1>City Professional <br><span class="text-accent">Travel Solutions</span></h1>
+                    <p>Experience the gold standard in premium transportation. Book your high-end journey with
+                        professional captains.</p>
+                    <div style="margin-top: 3rem; display: flex; gap: 1.5rem; flex-wrap: wrap;" id="hero-actions">
+                        <button class="btn btn-primary guest-action" onclick="openMapPicker()">Book Now</button>
+                        <button class="btn guest-action" style="border: 1px solid rgba(255,255,255,0.3); color: white;"
+                            onclick="document.getElementById('fleet').scrollIntoView({behavior: 'smooth'})">View
+                            Fleet</button>
+
+                        <button id="hero-dashboard-btn" class="btn btn-primary auth-action"
+                            style="display:none;">My Dashboard</button>
+                        <button class="btn auth-action"
+                            style="display:none; border: 1px solid rgba(255,255,255,0.3); color: white; background-color: rgba(0,0,0,0.5);"
+                            onclick="logoutUser()">Logout</button>
+                    </div>
+                </div>
+
+                <div class="booking-widget">
+                    <div class="service-category-tabs">
+                        <button type="button" class="category-btn active" data-category="local">Local</button>
+                        <button type="button" class="category-btn" data-category="outstation">Outstation</button>
+                        <button type="button" class="category-btn" data-category="rental">Rental</button>
+                    </div>
+
+                    <form id="booking-form" class="widget-form">
+                        <div class="form-grid">
+                            <div class="input-group">
+                                <label for="pickup">
+                                    Pickup Location 
+                                    <div class="location-actions">
+                                        <span class="map-picker-link" onclick="useLiveLocation(event)">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+                                            Live
+                                        </span>
+                                        <span class="map-picker-link" onclick="openMapPicker('pickup', event)">
+                                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>
+                                            Map
+                                        </span>
+                                    </div>
+                                </label>
+                                <input type="text" id="pickup" placeholder="Enter pickup address" required>
+                                <div id="pickup-suggestions" class="suggestions"></div>
+                            </div>
+                            <div class="input-group" id="destination-group">
+                                <label for="drop">Destination <span class="map-picker-link" onclick="openMapPicker('drop', event)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>Pick on Map</span></label>
+                                <input type="text" id="drop" placeholder="Enter destination" required autocomplete="off">
+                                <div id="drop-suggestions" class="suggestions"></div>
+                            </div>
+
+                            <div class="input-group">
+                                <label for="pickup-date">Departure Date</label>
+                                <input type="date" id="pickup-date" required>
+                            </div>
+                            <div class="input-group">
+                                <label for="pickup-time">Departure Time</label>
+                                <input type="time" id="pickup-time" required>
+                            </div>
+                            <div class="input-group" id="return-date-group" style="display:none;">
+                                <label for="return-date">Return Date (Optional)</label>
+                                <input type="date" id="return-date">
+                            </div>
+                            <div class="input-group" id="rental-package-group" style="display:none;">
+                                <label for="rental-package">Rental Package</label>
+                                <select id="rental-package">
+                                    <option value="2-20">2 Hours | 20 KM</option>
+                                    <option value="4-40">4 Hours | 40 KM</option>
+                                    <option value="8-80" selected>8 Hours | 80 KM</option>
+                                    <option value="12-120">12 Hours | 120 KM</option>
+                                </select>
+                            </div>
+                            <div class="input-group">
+                                <label for="passengers">Number of Passengers</label>
+                                <select id="passengers" required>
+                                    <option value="1">1 Passenger</option>
+                                    <option value="2">2 Passengers</option>
+                                    <option value="3">3 Passengers</option>
+                                    <option value="4">4 Passengers</option>
+                                    <option value="5">5 Passengers</option>
+                                    <option value="6">6 Passengers</option>
+                                </select>
+                            </div>
+                            <div class="input-group" style="display:none;">
+                                <label for="vehicle-type">Vehicle Preference</label>
+                                <select id="vehicle-type">
+                                    <option value="auto">Auto Select</option>
+                                    <option value="bike">Classy Bike Taxi (1 Seater)</option>
+                                    <option value="sedan" selected>Sedan (4+1 Seater)</option>
+                                    <option value="suv">SUV (Xylo / 6+1 Seater)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div id="vehicle-selection-container" class="vehicle-options-grid">
+                            <!-- Unified list will be rendered here -->
+                        </div>
+                        <!-- Populated via JS after distance calculation -->
+
+                        <div id="fare-estimate" class="fare-estimate hidden" style="display:none !important;">
+                            <div class="fare-details">
+                                <p style="font-weight:700;">Total KM: <span id="distance-val" style="color:var(--primary-red);">0</span> KM</p>
+                                <p style="font-weight:700;">Estimated Fare: <span id="fare-val" style="color:var(--primary-red);">₹0</span></p>
+                            </div>
+                            <div class="vehicle-auto-badge" id="vehicle-badge">
+                                Standard Sedan
+                            </div>
+                        </div>
+
+                        <button type="submit" class="btn btn-large btn-submit" style="background-color: #B71C1C; color: white;">Book Now!</button>
+                    </form>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Map Picker Modal -->
+    <div id="map-modal" class="map-modal">
+        <div class="map-modal-content">
+            <div class="map-header">
+                <h3>Select <span id="picking-type">pickup</span> on Map</h3>
+                <button class="close-map" onclick="closeMapPicker()">&times;</button>
+            </div>
+            <div id="map-picker"></div>
+            <div class="map-footer">
+                <div id="map-instructions">
+                    <p>Click on the map to set your location.</p>
+                </div>
+                <button id="confirm-location" class="btn btn-primary" style="display:none;" onclick="confirmMapPoint()">Confirm Point</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Booking Confirmation Modal -->
+    <div id="booking-modal" class="map-modal" style="display:none; padding: 20px;">
+        <div class="map-modal-content" style="max-width: 550px; width: 95%; height: auto; max-height: 92vh; border-radius: 24px;">
+            <div class="map-header">
+                <h3>Important Booking Policy</h3>
+                <button class="close-map" onclick="closeBookingModal()">&times;</button>
+            </div>
+            <div class="modal-body" style="padding: 1.5rem;">
+                <div id="booking-summary">
+                    <!-- Dynamic summary will be injected here -->
+                </div>
+                <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+                    <button class="btn btn-primary" style="flex: 1;" onclick="confirmBookingWithTerms()">Accept & Continue</button>
+                    <button class="btn" style="flex: 1; border: 1px solid var(--accents);" onclick="closeBookingModal()">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <script>
+        window.addEventListener('load', () => {
+            const splash = document.getElementById('splash-screen');
+            if (splash) {
+                setTimeout(() => {
+                    splash.classList.add('splash-hidden');
+                    document.body.style.setProperty('overflow', 'auto', 'important');
+                }, 3200);
+            }
+        });
+    </script>
+    <script src="app.js"></script>
+    <script src="alert.js"></script>
+</body>
+
+</html>

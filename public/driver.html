@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CityRideTaxi | Driver Portal</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="config.js"></script>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <!-- Leaflet for Mission Tracking -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+        .driver-container {
+            padding: 120px 0;
+            background: #f4f4f4;
+            min-height: 100vh;
+        }
+
+        #mission-map {
+            height: 400px;
+            width: 100%;
+            border-radius: 20px;
+            border: 4px solid var(--white);
+            box-shadow: var(--shadow-md);
+            margin-top: 1rem;
+            z-index: 10;
+        }
+
+        /* Radar Pulse Animation */
+        .radar-pulse {
+            position: relative;
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: #10B981;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+
+        .radar-pulse::after {
+            content: '';
+            position: absolute;
+            top: -4px;
+            left: -4px;
+            right: -4px;
+            bottom: -4px;
+            border: 2px solid #10B981;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+            opacity: 0;
+        }
+
+        @keyframes pulse {
+            0% {
+                transform: scale(0.5);
+                opacity: 0;
+            }
+
+            50% {
+                opacity: 1;
+            }
+
+            100% {
+                transform: scale(1.5);
+                opacity: 0;
+            }
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+        }
+
+        .mission-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+        }
+
+        .panel {
+            background: white;
+            border-radius: 24px;
+            padding: 2.5rem;
+            box-shadow: var(--shadow-md);
+            border: 1px solid var(--accents);
+        }
+
+        .job-card {
+            background: #fafafa;
+            border: 1px solid #eee;
+            padding: 1.5rem;
+            border-radius: 16px;
+            margin-bottom: 1.5rem;
+        }
+
+        .customer-info {
+            margin-top: 1rem;
+            padding-top: 1rem;
+            border-top: 1px dashed #ccc;
+            font-size: 0.9rem;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.3rem 0.8rem;
+            border-radius: 12px;
+            font-size: 0.7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            margin-bottom: 0.5rem;
+        }
+
+        @media (max-width: 900px) {
+            .grid, .mission-grid {
+                grid-template-columns: 1fr;
+            }
+            .mission-grid {
+                gap: 2rem !important;
+            }
+            .support-grid {
+                grid-template-columns: 1fr !important;
+                gap: 2rem !important;
+                text-align: center;
+            }
+            .support-grid > div {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+            }
+        }
+
+        .support-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 3rem;
+            align-items: center;
+        }
+
+        /* Toast Notifications */
+
+        @keyframes fadeOut {
+            from { transform: translateX(0); opacity: 1; }
+            to { transform: translateX(50%); opacity: 0; }
+        }
+    </style>
+</head>
+
+<body style="overflow: hidden;"> <!-- Lock scroll during splash -->
+    <div id="splash-screen">
+        <div class="splash-grid"></div>
+        <div class="splash-orb"></div>
+        <div class="splash-ring"></div>
+        <div class="splash-ring splash-ring-2"></div>
+        <div class="splash-logo-wrap">
+            <img src="logo.png" class="splash-logo" alt="CityRideTaxi">
+            <div class="splash-brand"><span>CityRide</span>Taxi</div>
+            <div class="splash-tagline">Premium Cab Booking</div>
+        </div>
+        <div class="splash-road-wrap">
+            <div class="splash-road"></div>
+            <svg class="splash-car" width="64" height="28" viewBox="0 0 64 28" fill="none">
+                <rect x="8" y="12" width="48" height="12" rx="4" fill="#dc143c"/>
+                <path d="M18 12 L22 4 L42 4 L46 12Z" fill="#c01030"/>
+                <rect x="23" y="5" width="8" height="6" rx="1" fill="rgba(150,220,255,0.7)"/>
+                <rect x="33" y="5" width="8" height="6" rx="1" fill="rgba(150,220,255,0.7)"/>
+                <circle cx="18" cy="24" r="4" fill="#1a1a1a" stroke="#555" stroke-width="1.5"/>
+                <circle cx="18" cy="24" r="1.5" fill="#888"/>
+                <circle cx="46" cy="24" r="4" fill="#1a1a1a" stroke="#555" stroke-width="1.5"/>
+                <circle cx="46" cy="24" r="1.5" fill="#888"/>
+                <ellipse cx="57" cy="16" rx="5" ry="3" fill="rgba(255,220,100,0.5)"/>
+                <rect x="54" y="14" width="3" height="4" rx="1" fill="#ffd700"/>
+            </svg>
+        </div>
+        <div class="splash-progress-wrap"><div class="splash-progress-bar"></div></div>
+        <div class="splash-status">Dispatching Systems…</div>
+    </div>
+    <header class="header">
+        <nav class="container nav">
+            <div class="logo" onclick="window.location.href='index.html'" style="cursor:pointer;">
+                <img src="logo.png" alt="CityRideTaxi" style="height: 50px; width: auto;">
+            </div>
+            <div class="driver-nav-actions">
+                <button class="btn btn-primary" onclick="logoutUser()"
+                    style="padding: 0.6rem 1.2rem; font-size: 0.9rem; background: var(--primary-red); border: none;">Logout</button>
+            </div>
+        </nav>
+    </header>
+
+    <main class="driver-container">
+        <div class="container">
+            <div style="margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem;">
+                <div>
+                    <h1>CityRide Driver: <span id="driver-name" class="text-accent">Loading...</span></h1>
+                    <p id="car-info" style="color: #666; margin-top: 0.5rem;">Vehicle: Loading...</p>
+                </div>
+                <div style="background: #1a1a1a; color: white; padding: 1.5rem 2.5rem; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-left: 4px solid var(--primary-red);">
+                    <p style="margin: 0; font-size: 0.8rem; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px;">Wallet Balance</p>
+                    <h2 style="margin: 0.5rem 0 0 0; font-size: 2.2rem; display: flex; align-items: center; gap: 0.3rem;"><span style="color:var(--primary-red)">₹</span><span id="wallet-balance" style="color: #eee;">0.00</span></h2>
+                </div>
+            </div>
+
+            <!-- Active Mission Tracker (Copied from Dashboard) -->
+            <div id="active-mission-container" class="hidden" style="margin-bottom: 3rem;">
+                <div class="panel" style="border-left: 5px solid var(--primary-red); background: #fffcfc;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 2rem;">
+                        <h3><span class="radar-pulse"></span> Mission Intelligence Radar</h3>
+                        <span id="active-status" class="badge" style="background:#CCE5FF; color:#004085; padding: 0.5rem 1rem;">TRACKING</span>
+                    </div>
+
+                    <div id="mission-map"></div>
+
+                    <div id="active-details" class="mission-grid"
+                        style="margin-top: 2rem;">
+                        <!-- Assigned dynamically -->
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid">
+                <!-- Available Jobs -->
+                <div class="panel">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+                        <h3 style="margin-bottom: 0;">Available Opportunities</h3>
+                        <button class="btn btn-primary" onclick="openOpportunityModal()" style="width: 45px; height: 45px; padding: 0; border-radius: 50%; display: flex; align-items: center; justify-content: center; box-shadow: 0 8px 15px rgba(183,28,28,0.2);">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                        </button>
+                    </div>
+                    <div id="available-jobs">
+                        <!-- Jobs injected here -->
+                    </div>
+                </div>
+
+                <!-- My Active Rides -->
+                <div class="panel">
+                    <h3 style="margin-bottom: 2rem;">My CityRide Assignments</h3>
+                    <div id="my-jobs">
+                        <!-- My jobs injected here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Driver Support Section -->
+            <div class="panel" style="background: var(--dark-charcoal); color: white; border: none; margin-top: 3rem;">
+                <div class="support-grid">
+                    <div>
+                        <h3 style="color: var(--primary-red); margin-bottom: 1rem;">Driver Support Center</h3>
+                        <p style="opacity: 0.8; font-size: 0.95rem;">Encountering any issues during your ride? Connect directly with our support team for immediate resolution.</p>
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 1rem;">
+                        <div style="display: flex; align-items: center; gap: 1rem; text-align: left;">
+                            <div style="background: rgba(183,28,28,0.15); width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--primary-red)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2v16Z"/><path d="M12 18V6"/><path d="M8 10V6"/><path d="M16 14V6"/></svg>
+                            </div>
+                            <div>
+                                <div style="font-weight: 700;">Driver Helpline</div>
+                                <div style="color: var(--primary-red); font-weight: 800; font-size: 1.1rem;">+91 99887 76655</div>
+                            </div>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 1rem; text-align: left;">
+                            <div style="background: rgba(255,255,255,0.1); width: 45px; height: 45px; border-radius: 12px; display: flex; align-items: center; justify-content: center; flex-shrink: 0;">
+                                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                            </div>
+                            <div>
+                                <div style="font-weight: 700;">Admin Registry (Dispatch)</div>
+                                <div style="opacity: 0.8;">dispatch@cityridetaxi.com</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Opportunity Map Modal (Isolated Style) -->
+    <div id="opp-map-modal" class="tactical-modal" style="display: none;">
+        <div class="tactical-modal-inner">
+            <button onclick="closeOpportunityModal()" class="tactical-close">✕</button>
+            <div id="opportunity-map" style="width: 100%; height: 100%;"></div>
+        </div>
+    </div>
+
+    <script>
+        let isMapInitialized = false;
+        let driverMap = null;
+        let opportunityMap = null;
+        let opportunityMarkers = [];
+        let currentTacticalJobId = null;
+        let lastSeenJobs = new Set();
+        let lastSeenMyJobs = new Map(); // id -> status
+        let initialLoadDone = false;
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const user = JSON.parse(localStorage.getItem('cityride_pilot'));
+            if (!user) {
+                window.location.href = 'driver-login.html';
+                return;
+            }
+
+            document.getElementById('driver-name').textContent = user.name;
+            document.getElementById('car-info').textContent = `Vehicle: ${user.car_model} (${user.car_number})`;
+
+
+            await loadAllJobs(user.id);
+            updateDriverInfo(user.id);
+            initialLoadDone = true;
+
+            // Live Status Radar Array Poll (5 seconds)
+            setInterval(() => {
+                loadAllJobs(user.id);
+                updateDriverInfo(user.id);
+            }, 5000);
+        });
+
+        function showToast(title, message, type = 'info') {
+            // Notification feature removed as per user request
+            console.log(`TOAST (${type}): ${title} - ${message}`);
+        }
+
+        async function updateDriverInfo(driverId) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/info/${driverId}`);
+                if (res.ok) {
+                    const data = await res.json();
+                    if(data.success) {
+                        const bal = parseFloat(data.driver.wallet_balance || 0).toFixed(2);
+                        document.getElementById('wallet-balance').textContent = bal;
+                        // update local storage safely
+                        const user = JSON.parse(localStorage.getItem('cityride_pilot'));
+                        user.wallet_balance = data.driver.wallet_balance;
+                        localStorage.setItem('cityride_pilot', JSON.stringify(user));
+                    }
+                }
+            } catch (err) { console.error('Failed to update wallet info'); }
+        }
+
+        async function loadAllJobs(driverId) {
+            const hasActive = await loadMyJobs(driverId);
+            loadAvailableJobs(driverId, hasActive);
+        }
+
+        async function loadAvailableJobs(driverId, hasActive = false) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/jobs/${driverId}`);
+                const jobs = await res.json();
+
+                // Delta Tracking for New Jobs
+                if (initialLoadDone) {
+                    jobs.forEach(job => {
+                        if (!lastSeenJobs.has(job.id)) {
+                            showToast('New Mission Available', `Ride from ${job.pickup_loc.split(',')[0]} is ready for dispatch!`, 'info');
+                        }
+                    });
+                }
+                lastSeenJobs = new Set(jobs.map(j => j.id));
+
+                const container = document.getElementById('available-jobs');
+                container.innerHTML = jobs.length ? '' : '<p class="empty-state">No pending rides available in your area.</p>';
+
+                // OPPORTUNITY MAP LOGIC
+                if (!opportunityMap && jobs.length > 0) {
+                    opportunityMap = L.map('opportunity-map').setView([13.08, 80.27], 11);
+                    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(opportunityMap);
+                }
+
+                // Global state for map rendering
+                window.allAvailableJobs = jobs;
+                window.lastDriverId = driverId;
+                window.lastHasActive = hasActive;
+
+                // Refresh map if currently visible (maintaining focus if specific job selected)
+                if (document.getElementById('opp-map-modal').style.display === 'flex') {
+                    renderOpportunityMap(currentTacticalJobId);
+                }
+
+                // Render Job Cards
+                jobs.forEach(job => {
+                    const card = document.createElement('div');
+                    card.className = 'job-card';
+                    card.innerHTML = `
+                        <div style="display:flex; gap:0.5rem; flex-direction:column; margin-bottom:1rem;">
+                            <div style="display:flex; gap:0.5rem;">
+                                <div class="badge" style="background:#e3f2fd; color:#1565c0">${job.vehicle_type}</div>
+                                <div class="badge" style="background:#f3e5f5; color:#7b1fa2">${(job.trip_type === 'round' ? 'Round Trip' : (job.trip_type === 'rental' ? 'Local Rental' : (job.trip_type || 'One Way').replace('_', ' ')))}</div>
+                            </div>
+                        </div>
+                        <div style="font-weight:700;">
+                            <span>${job.pickup_loc}</span>
+                        </div>
+                        <div style="font-size:0.85rem; color:#666; margin-top:4px;">
+                            <span>→ ${job.drop_loc}</span>
+                        </div>
+                        <div style="font-size:0.85rem; color:var(--primary-red); font-weight:700; margin-top:8px;">
+                            👤 ${job.customer_name || 'Passenger'}
+                        </div>
+                        <div style="font-weight:700; font-size:1.1rem; margin-top:1rem; color:var(--primary-red); display:flex; justify-content:space-between; align-items:center;">
+                            <span>${job.fare}</span>
+                            <button class="btn" onclick="openOpportunityModal(${job.id})" style="background:rgba(183,28,28,0.1); border:none; padding:8px; border-radius:10px; color:var(--primary-red); display:flex; align-items:center; justify-content:center;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="1 6 1 22 8 18 16 22 23 18 23 2 16 6 8 2 1 6"/><line x1="8" y1="2" x2="8" y2="18"/><line x1="16" y1="6" x2="16" y2="22"/></svg>
+                            </button>
+                        </div>
+                        <div style="font-size:0.8rem; color:#666; margin-bottom:1rem;">Distance: ${job.distance}</div>
+                        <button class="btn btn-primary" style="width:100%" onclick="acceptRide(${job.id}, ${driverId}, ${hasActive})">Accept Mission</button>
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        function renderOpportunityMap(singleJobId = null) {
+            if (!opportunityMap || !window.allAvailableJobs) return;
+
+            // Clear existing markers
+            opportunityMarkers.forEach(m => m.remove());
+            opportunityMarkers = [];
+
+            const bounds = [];
+            // Filter if we only want to see 1 mission
+            const jobsToRender = singleJobId ? window.allAvailableJobs.filter(j => j.id === singleJobId) : window.allAvailableJobs;
+
+            jobsToRender.forEach(job => {
+                if (job.pickup_coords && job.drop_coords) {
+                    const [pLng, pLat] = job.pickup_coords.split(',').map(Number);
+                    const [dLng, dLat] = job.drop_coords.split(',').map(Number);
+
+                    // Pickup Marker
+                    const pMarker = L.marker([pLat, pLng], {
+                        icon: L.divIcon({
+                            className: 'pin-wrapper',
+                            html: `<div class="pin-pointer"><span>#B${job.id}</span></div>`,
+                            iconSize: [32, 42],
+                            iconAnchor: [16, 42]
+                        })
+                    })
+                    .addTo(opportunityMap)
+                    .bindPopup(`<b>📍 Trip #B${job.id} Pickup</b><br>${job.pickup_loc}<br><br><button class="btn btn-primary" style="font-size:0.7rem; padding:5px 10px;" onclick="acceptRide(${job.id}, ${window.lastDriverId}, ${window.lastHasActive})">Accept Mission</button>`);
+
+                    // Destination Node
+                    const dMarker = L.marker([dLat, dLng], {
+                        icon: L.divIcon({
+                            className: 'pin-wrapper',
+                            html: `<div class="pin-pointer-dest"></div>`,
+                            iconSize: [24, 34],
+                            iconAnchor: [12, 34]
+                        })
+                    })
+                    .addTo(opportunityMap)
+                    .bindPopup(`<b>🏁 Trip #B${job.id} Destination</b><br>${job.drop_loc}`);
+
+                    // Trajectory Path
+                    const line = L.polyline([[pLat, pLng], [dLat, dLng]], {
+                        color: '#e64a19',
+                        weight: 3,
+                        opacity: 0.6,
+                        dashArray: '5, 10'
+                    }).addTo(opportunityMap);
+
+                    opportunityMarkers.push(pMarker, dMarker, line);
+                    bounds.push([pLat, pLng], [dLat, dLng]);
+                }
+            });
+
+            if (bounds.length > 0) {
+                opportunityMap.fitBounds(bounds, { padding: [80, 80] });
+            }
+        }
+        async function loadMyJobs(driverId) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/my-jobs/${driverId}?t=${Date.now()}`); // cache buster
+                const jobs = await res.json();
+
+                // Delta Tracking for Status Changes & New Captures
+                if (initialLoadDone) {
+                    jobs.forEach(job => {
+                        if (!lastSeenMyJobs.has(job.id)) {
+                            showToast('Mission Locked', `You have successfully captured Trip #B${job.id}.`, 'success');
+                        } else if (lastSeenMyJobs.get(job.id) !== job.status) {
+                            showToast('Status Update', `Trip #B${job.id} is now ${job.status.toUpperCase()}.`, 'info');
+                        }
+                    });
+                }
+                lastSeenMyJobs = new Map(jobs.map(j => [j.id, j.status]));
+
+                const container = document.getElementById('my-jobs');
+                container.innerHTML = jobs.length ? '' : '<p class="empty-state">You have no active assignments.</p>';
+                
+                // Find Active Mission (assigned, ongoing, or awaiting cancellation)
+                const activeMission = jobs.find(j => ['assigned', 'ongoing', 'cancel_requested'].includes(j.status));
+                const activeContainer = document.getElementById('active-mission-container');
+                
+                if (activeMission) {
+                    activeContainer.classList.remove('hidden');
+                    const details = document.getElementById('active-details');
+                    const statusTag = document.getElementById('active-status');
+
+                    statusTag.className = `badge`;
+                    const isPendingCancel = activeMission.status === 'cancel_requested';
+                    statusTag.style.background = isPendingCancel ? '#fce4ec' : '#CCE5FF';
+                    statusTag.style.color = isPendingCancel ? '#c2185b' : '#004085';
+                    statusTag.textContent = isPendingCancel ? 'ABORT PENDING' : activeMission.status.toUpperCase();
+
+                    details.innerHTML = `
+                        <div class="mission-grid">
+                            <div>
+                                <div style="padding:1.5rem; background:white; border-radius:15px; border:1px solid #eee;">
+                                    <div style="font-weight:600; color:var(--primary-red); margin-bottom:0.5rem;">Ride Details</div>
+                                    <div style="font-size:0.95rem; font-weight:700;">Estimated Fee: <span style="color:var(--primary-red)">${activeMission.fare}</span></div>
+                                    <div style="font-size:0.85rem; color: #7b1fa2; font-weight: 700; text-transform: uppercase; margin-top:0.5rem;">Type: ${(activeMission.trip_type === 'round' ? 'Round Trip' : (activeMission.trip_type === 'rental' ? 'Local Rental' : (activeMission.trip_type || 'One Way').replace('_', ' ')))}</div>
+                                    <div style="font-size:0.85rem; margin-top:0.4rem; font-weight:700; color:var(--text-muted)">Booking ID: #B${activeMission.id}</div>
+                                </div>
+                                <div style="margin-top:1.5rem; padding: 0 1rem;">
+                                    <div style="margin-bottom:1.5rem;">
+                                        <div style="font-size:0.7rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Pickup:</div>
+                                        <div style="font-weight:700; font-size:1.1rem;">${activeMission.pickup_loc}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size:0.7rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Dropoff:</div>
+                                        <div style="font-weight:700; font-size:1.1rem;">${activeMission.drop_loc}</div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div style="background:#f9f9f9; padding:2rem; border-radius:20px; text-align:center; display:flex; flex-direction:column; justify-content:center; border: 1px solid var(--accents);">
+                                <div style="font-size:0.7rem; text-transform:uppercase; color:var(--text-muted); font-weight:700; margin-bottom:1rem;">Passenger</div>
+                                <div style="font-weight:700; font-size:1.2rem; color:var(--primary-red); margin-bottom:0.5rem;">${activeMission.customer_name}</div>
+                                <div style="margin-top:1rem;"><a href="tel:${activeMission.customer_phone}" class="btn btn-primary" style="padding:0.7rem 1.5rem;">Call Passenger</a></div>
+                                <div style="display:flex; flex-direction:column; gap:10px; margin-top:1.5rem;">
+                                    ${activeMission.status === 'assigned' ? `
+                                        ${activeMission.trip_type === 'rental' ? `
+                                            <button class="btn btn-primary" style="background:#007bff; border-color:#007bff" onclick="startJourney(${activeMission.id}, ${driverId})">Start Journey</button>
+                                        ` : `
+                                            <button class="btn btn-primary" style="background:#28a745; border-color:#28a745" onclick="completeRide(${activeMission.id}, ${driverId}, this)">Complete Journey</button>
+                                        `}
+                                        <button class="btn" style="background:#dc3545; color:white; border:none; padding:0.7rem; font-weight:700; border-radius:12px; cursor:pointer;" onclick="requestCancel(${activeMission.id}, ${driverId})">Abort Mission</button>
+                                    ` : activeMission.status === 'ongoing' ? `
+                                        <button class="btn btn-primary" style="background:#28a745; border-color:#28a745" onclick="completeRide(${activeMission.id}, ${driverId}, this, true)">Complete Journey</button>
+                                    ` : `
+                                        <div style="background:#fff3e0; color:#e65100; padding:1rem; border-radius:12px; font-weight:600; font-size:0.85rem; border:1px solid #ffe0b2;">
+                                            🛑 Abort Request is under review by Ground Control.
+                                        </div>
+                                    `}
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    // MAP INITIALIZATION (Enhanced with cleanup and invalidateSize)
+                    if (!isMapInitialized) {
+                        isMapInitialized = true;
+                        setTimeout(async () => {
+                            try {
+                                if (driverMap) {
+                                    driverMap.remove();
+                                }
+                                driverMap = L.map('mission-map').setView([13.08, 80.27], 13);
+                                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(driverMap);
+
+                                const getCoords = async (addr, storedCoords) => {
+                                    if (storedCoords) return storedCoords.split(',').map(Number);
+                                    try {
+                                        const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(addr)}&limit=1`);
+                                        const d = await r.json();
+                                        return d.features[0]?.geometry.coordinates;
+                                    } catch (e) { return null; }
+                                };
+
+                                const pCoords = await getCoords(activeMission.pickup_loc, activeMission.pickup_coords);
+                                const dCoords = await getCoords(activeMission.drop_loc, activeMission.drop_coords);
+
+                                if (pCoords && dCoords) {
+                                    const pMarker = L.marker([pCoords[1], pCoords[0]]).addTo(driverMap).bindPopup(`<b>📍 Pickup:</b><br>${activeMission.pickup_loc}`);
+                                    const dMarker = L.marker([dCoords[1], dCoords[0]]).addTo(driverMap).bindPopup(`<b>🏁 Destination:</b><br>${activeMission.drop_loc}`);
+
+                                    // Draw Route
+                                    try {
+                                        const routeRes = await fetch(`https://router.project-osrm.org/route/v1/driving/${pCoords[0]},${pCoords[1]};${dCoords[0]},${dCoords[1]}?overview=full&geometries=geojson`);
+                                        const routeData = await routeRes.json();
+                                        L.geoJSON(routeData.routes[0].geometry, { style: { color: "#B71C1C", weight: 5, opacity: 0.7 } }).addTo(driverMap);
+                                    } catch (e) { }
+
+                                    const group = new L.featureGroup([pMarker, dMarker]);
+                                    driverMap.fitBounds(group.getBounds().pad(0.2));
+                                }
+                                
+                                // Fix gray tiles issue
+                                driverMap.invalidateSize();
+                            } catch (e) {
+                                console.log('Map init skipped or failed:', e.message);
+                                isMapInitialized = false; // Allow retry on next poll if failed
+                            }
+                        }, 500);
+                    }
+                } else {
+                    activeContainer.classList.add('hidden');
+                    isMapInitialized = false; // Reset if no active mission
+                }
+
+                jobs.forEach(job => {
+                    const isCompleted = job.status === 'completed';
+                    const card = document.createElement('div');
+                    card.className = 'job-card';
+                    card.innerHTML = `
+                        <div style="display:flex; gap:0.5rem; flex-direction:column; margin-bottom:1rem;">
+                            <div style="display:flex; gap:0.5rem;">
+                                <div class="badge" style="background:${isCompleted ? '#e8f5e9' : '#fff3e0'}; color:${isCompleted ? '#2e7d32' : '#e65100'}">${job.status}</div>
+                                <div class="badge" style="background:#f3e5f5; color:#7b1fa2">${(job.trip_type === 'round' ? 'Round Trip' : (job.trip_type === 'rental' ? 'Local Rental' : (job.trip_type || 'One Way').replace('_', ' ')))}</div>
+                            </div>
+                        </div>
+                        <div style="font-weight:700">Trip #B${job.id}</div>
+                        <div style="font-size:0.85rem;">
+                            <span>${job.pickup_loc}</span>
+                        </div>
+                        <div style="font-size:0.85rem; margin-top:4px;">
+                            <span>→ ${job.drop_loc}</span>
+                        </div>
+                        
+                        <div class="customer-info">
+                            <div style="font-weight:700">Passenger Details:</div>
+                            <div>👤 ${job.customer_name || 'Passenger'}</div>
+                            <div>📞 <a href="tel:${job.customer_phone || ''}" style="color:var(--primary-red)">${job.customer_phone || 'N/A'}</a></div>
+                        </div>
+
+                        ${(!isCompleted && (!activeMission || activeMission.id !== job.id)) ? `
+                            <button class="btn btn-primary" style="margin-top:1rem; background:#28a745; border-color:#28a745" onclick="completeRide(${job.id}, ${driverId}, this)">Mark Completed</button>
+                        ` : ''}
+                    `;
+                    container.appendChild(card);
+                });
+            } catch (err) { console.error(err); }
+        }
+
+        async function acceptRide(rideId, driverId, hasActive) {
+            if (hasActive) {
+                alert('Warning: You have a mission still pending/active. You must complete your current assignment before capturing new missions.');
+                return;
+            }
+            if (!confirm('Capturing this mission? Ensure you are ready for immediate dispatch.')) return;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/bookings/accept`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingId: rideId, driverId })
+                });
+
+                if (res.ok) {
+                    showToast('Mission Locked', `You have successfully captured Trip #B${rideId}.`, 'success');
+                    loadAllJobs(driverId);
+                } else {
+                    const data = await res.json();
+                    alert(`Capture failed: ${data.error}`);
+                }
+            } catch (err) { alert('Network error during mission capture.'); }
+        }
+
+        async function startJourney(rideId, driverId) {
+            const odo = prompt('JOURNEY INITIALIZATION\nPlease enter the Opening Odometer reading:');
+            if (!odo || isNaN(odo)) {
+                alert('Invalid Odometer reading.');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/bookings/start-journey`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingId: rideId, startOdometer: parseInt(odo) })
+                });
+
+                if (res.ok) {
+                    alert('🚀 JOURNEY STARTED! Timer is now active. Drive safe!');
+                    loadAllJobs(driverId);
+                } else {
+                    const error = await res.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (err) { alert('Network error during journey start.'); }
+        }
+
+        async function completeRide(rideId, driverId, btn, isRental = false) {
+            let endOdo = null;
+            if (isRental) {
+                endOdo = prompt('JOURNEY CONCLUSION\nPlease enter the Closing Odometer reading:');
+                if (!endOdo || isNaN(endOdo)) {
+                    alert('Invalid Odometer reading.');
+                    return;
+                }
+            }
+
+            const otp = prompt('MISSION VERIFICATION REQUIRED\n Please enter the 4-digit Identity Token provided by the passenger to conclude this mission:');
+            if (!otp) return;
+
+            try {
+                const payload = { bookingId: rideId, status: 'completed', otp };
+                if (isRental) payload.endOdometer = parseInt(endOdo);
+
+                const res = await fetch(`${API_BASE_URL}/api/bookings/update-status`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+
+                if (res.ok) {
+                    alert('🎉 CONGRATULATIONS! Journey verified and completed successfully. Your earnings have been credited.');
+                    setTimeout(() => {
+                        window.location.reload();
+                    }, 2000);
+                } else {
+                    const error = await res.json();
+                    alert('🚨 VERIFICATION FAILURE: ' + (error.error || 'Identity Token Mismatch. Action Logged.'));
+                }
+            } catch (err) { alert('Network error during mission conclusion.'); }
+        }
+
+        function logoutUser() {
+            localStorage.removeItem('cityride_pilot');
+            window.location.href = 'driver-login.html';
+        }
+
+        function openOpportunityModal(jobId = null) {
+            currentTacticalJobId = jobId;
+            const modal = document.getElementById('opp-map-modal');
+            modal.style.display = 'flex';
+            
+            if (opportunityMap) {
+                setTimeout(() => {
+                    opportunityMap.invalidateSize();
+                    // Render/Recenter after size is valid and animation is nearly done
+                    renderOpportunityMap(currentTacticalJobId);
+                }, 400);
+            } else {
+                 renderOpportunityMap(currentTacticalJobId);
+            }
+        }
+
+        function closeOpportunityModal() {
+            currentTacticalJobId = null;
+            document.getElementById('opp-map-modal').style.display = 'none';
+        }
+
+        async function requestCancel(rideId, driverId) {
+            const reason = prompt('Please specify the reason for aborting this mission:');
+            if (!reason) return;
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/request-cancel`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingId: rideId, driverId, reason })
+                });
+
+                if (res.ok) {
+                    showToast('Abort Requested', 'Ground Control has been notified. This mission remains active until approved.', 'info');
+                    loadAllJobs(driverId);
+                } else {
+                    const data = await res.json();
+                    alert(`Request failed: ${data.error}`);
+                }
+            } catch (err) { alert('Network error during cancellation request.'); }
+        }
+
+    </script>
+    <script>
+        window.addEventListener('load', () => {
+            const splash = document.getElementById('splash-screen');
+            if (splash) {
+                setTimeout(() => {
+                    splash.classList.add('splash-hidden');
+                    document.body.style.setProperty('overflow', 'auto', 'important');
+                }, 3200);
+            }
+        });
+    </script>
+</body>
+
+</html>
