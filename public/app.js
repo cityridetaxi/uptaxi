@@ -193,21 +193,21 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         // Selected Package for Rental
-        const packageVal = rentalPackageSelect.value;
+        const packageVal = rentalPackageSelect ? rentalPackageSelect.value : '2-20';
         const [pMaxHrs, pMaxKm] = packageVal.split('-').map(Number);
 
         const pricing = {
             bike: {
                 name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1,
-                local: { base: 50, perKm: 10, minKm: 4 },
-                oneway: { base: 140, perKm: 10, minKm: 4, convenience: 0 },
+                local: { base: 0, perKm: 10, minKm: 5 },
+                oneway: { base: 0, perKm: 10, minKm: 5, convenience: 0 },
                 round: null, rental: null
             },
             sedan: {
                 name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4,
-                local: { base: 250, perKm: 25, minKm: 10 },
-                oneway: { base: 0, perKm: 13, minKm: 130, convenience: 400 },
-                round: { base: 0, perKm: 12, minKmPerDay: 250, driverAllowance: 400 },
+                local: { base: 200, perKm: 25, minKm: 0 },
+                oneway: { base: 0, perKm: 13, minKm: 130 },
+                round: { base: 0, perKm: 12, minKmPerDay: 250 },
                 rental: { 
                     '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
                     '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
@@ -217,9 +217,9 @@ document.addEventListener('DOMContentLoaded', () => {
             },
             suv: {
                 name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6,
-                local: { base: 350, perKm: 35, minKm: 10 },
-                oneway: { base: 0, perKm: 19, minKm: 130, convenience: 400 },
-                round: { base: 0, perKm: 18, minKmPerDay: 250, driverAllowance: 500 },
+                local: { base: 300, perKm: 35, minKm: 0 },
+                oneway: { base: 0, perKm: 19, minKm: 130 },
+                round: { base: 0, perKm: 18, minKmPerDay: 250 },
                 rental: { 
                     '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
                     '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
@@ -259,25 +259,10 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!timeStr) return 0;
                     const [h, m] = timeStr.split(':').map(Number);
                     const tm = h * 60 + m;
-                    // Morning Peak: 8 AM to 11 AM (Dynamic)
-                    if (tm >= 480 && tm < 600) {
-                        const steps = Math.floor((tm - 480) / 30);
-                        return 0.05 + (steps * 0.05); 
-                    }
-                    if (tm >= 600 && tm < 660) {
-                        const steps = Math.floor((tm - 600) / 30);
-                        return 0.25 - (steps * 0.125); 
-                    }
-                    // Evening Peak: 4 PM to 9 PM (Dynamic)
-                    if (tm >= 960 && tm < 1080) {
-                        const steps = Math.floor((tm - 960) / 30);
-                        return 0.05 + (steps * 0.05);
-                    }
-                    if (tm >= 1080 && tm < 1260) {
-                        const steps = Math.floor((tm - 1080) / 30);
-                        const surcharge = 0.25 - (steps * 0.05); 
-                        return Math.max(0, surcharge);
-                    }
+                    // Morning Peak: 8 AM to 11 AM
+                    if (tm >= 480 && tm <= 660) return 0.25;
+                    // Evening Peak: 4 PM to 9 PM
+                    if (tm >= 960 && tm <= 1260) return 0.25;
                     return 0;
                 };
 
@@ -294,28 +279,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
                     displayDistance = `${distance} KM`;
                     detailLabel = `Incl. 5% GST.`;
-                    if (peakMult > 0) detailLabel += ` [Peak Hour +${Math.round(peakMult*100)}%]`;
+                    if (peakMult > 0) detailLabel += ` [Peak Hour +25%]`;
                 } else if (tType.id === 'oneway') {
                     const config = info.oneway;
                     const billableDist = Math.max(distance, 130);
-                    const baseFare = (billableDist * config.perKm) + (config.convenience || 0);
+                    const driverAllowance = billableDist > 250 ? 600 : 400;
+                    const baseFare = (billableDist * config.perKm) + (vType === 'bike' ? 0 : driverAllowance);
                     totalFare = baseFare * 1.05; // Incl 5% GST
                     displayDistance = `${distance} KM`;
-                    detailLabel = `Incl. 5% GST.`;
+                    detailLabel = `Incl. Allowance & 5% GST.`;
                     if (distance < 130) detailLabel += ` [130KM Min Applied]`;
                 } else if (tType.id === 'round') {
                     const config = info.round;
-                    const minKmForTrip = Math.max(250, config.minKmPerDay * tripDays);
+                    const minKmForTrip = Math.max(250, config.minKmForTrip || 250);
                     const actualTwoWayDist = distance * 2;
                     const billableDist = Math.max(actualTwoWayDist, minKmForTrip);
+                    const driverAllowance = billableDist > 250 ? 600 : 400;
                     const baseFare = (billableDist * config.perKm);
-                    const totalAllowance = config.driverAllowance * tripDays;
-                    totalFare = (baseFare + totalAllowance) * 1.05; // Incl 5% GST
+                    totalFare = (baseFare + (vType === 'bike' ? 0 : driverAllowance * tripDays)) * 1.05; // Incl 5% GST
                     displayDistance = `${distance} x 2 (${billableDist} KM Billable)`;
                     detailLabel = `${tripDays} Day(s) • Incl. Allowance & 5% GST.`;
                     if (actualTwoWayDist < 250) detailLabel += ` [250KM Min Applied]`;
                 } else if (tType.id === 'rental') {
+                    if (!info.rental) return;
                     const config = info.rental[packageVal];
+                    if (!config) return;
                     const extraKm = Math.max(0, distance - pMaxKm);
                     const baseFare = config.base + (extraKm * config.extraKm);
                     totalFare = baseFare * 1.05; // Rental usually no bata, but incl 5% GST
@@ -594,7 +582,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     <div style="font-weight: 800; color: var(--primary-red); margin-bottom: 0.8rem; text-transform: uppercase; letter-spacing: 1px; font-size: 1.1rem;">📋 Important Notice</div>
                     <div style="display: flex; flex-direction: column; gap: 10px;">
                         <div><b>@Additional:</b> Toll Fees, Inter-State Permit Airport Charges Parking Charges (if any) are extra.</div>
-                        <div><b>@Driver Betta:</b> Rs. 400. [Rs. 600 for above 400kms]</div>
+                        <div><b>@Driver Betta:</b> Rs. 400. [Rs. 600 for above 250kms]</div>
                         <div><b>@Hill Station Charges:</b> - Rs. 400</div>
                         <div><b>@One Way Drop Trips:</b> - Minimum running must be 130 kms</div>
                         <div><b>@Waiting Charges:</b> will be Rs.2 per min. (Except 30 min for food.)</div>

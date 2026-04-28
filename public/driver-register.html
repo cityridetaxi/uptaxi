@@ -152,6 +152,13 @@
         @media (max-width: 600px) {
             .input-grid { grid-template-columns: 1fr; }
             .reg-steps { flex-direction: column; gap: 1rem; align-items: flex-start; }
+            .input-row { flex-direction: column; }
+            .input-row .btn { width: 100%; border-radius: 12px !important; }
+        }
+
+        .input-row {
+            display: flex;
+            gap: 10px;
         }
     </style>
 </head>
@@ -192,7 +199,18 @@
                         </div>
                         <div class="input-group">
                             <label>Email Address</label>
-                            <input type="email" name="email" placeholder="pilot@cityridetaxi.com" required>
+                            <div class="input-row">
+                                <input type="email" id="driver-email" name="email" placeholder="pilot@cityridetaxi.com" required style="flex: 1;">
+                                <button type="button" id="send-otp-btn" class="btn" style="padding: 10px; font-size: 0.8rem; background: #333; color: white;" onclick="sendRegistrationOTP()">Send OTP</button>
+                            </div>
+                        </div>
+                        <div class="input-group" id="otp-group" style="display: none;">
+                            <label>Verification Token</label>
+                            <div class="input-row">
+                                <input type="text" id="email-otp" placeholder="6-Digit Code" style="flex: 1;">
+                                <button type="button" id="verify-otp-btn" class="btn" style="padding: 10px; font-size: 0.8rem; background: var(--primary-red); color: white;" onclick="verifyRegistrationOTP()">Verify</button>
+                            </div>
+                            <small id="otp-status" style="display: block; margin-top: 5px; font-size: 0.75rem; font-weight: 700;"></small>
                         </div>
                         <div class="input-group">
                             <label>Contact Number</label>
@@ -304,10 +322,101 @@
 
     <script>
         let currentStep = 1;
+        let isEmailVerified = false;
+
+        async function sendRegistrationOTP() {
+            const emailInput = document.getElementById('driver-email');
+            const email = emailInput.value.trim();
+            if (!email || !email.includes('@')) {
+                alert('Please enter a valid mission email.');
+                return;
+            }
+
+            const btn = document.getElementById('send-otp-btn');
+            btn.disabled = true;
+            btn.textContent = 'Transmitting...';
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/register/send-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email })
+                });
+                const result = await res.json();
+                
+                if (res.ok) {
+                    document.getElementById('otp-group').style.display = 'block';
+                    document.getElementById('otp-status').textContent = 'Token Dispatched. Check your inbox.';
+                    document.getElementById('otp-status').style.color = '#333';
+                    btn.textContent = 'Resend Token';
+                } else {
+                    alert(result.error);
+                }
+            } catch (err) {
+                alert('Neural Link failure.');
+            } finally {
+                btn.disabled = false;
+            }
+        }
+
+        async function verifyRegistrationOTP() {
+            const email = document.getElementById('driver-email').value.trim();
+            const otp = document.getElementById('email-otp').value.trim();
+            if (!otp) return;
+
+            const btn = document.getElementById('verify-otp-btn');
+            btn.disabled = true;
+            btn.textContent = 'Checking...';
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/driver/register/verify-otp`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ email, otp })
+                });
+                const result = await res.json();
+
+                if (res.ok) {
+                    isEmailVerified = true;
+                    document.getElementById('otp-status').textContent = 'IDENTITY VERIFIED ✓';
+                    document.getElementById('otp-status').style.color = '#2e7d32';
+                    document.getElementById('driver-email').disabled = true;
+                    document.getElementById('email-otp').disabled = true;
+                    document.getElementById('send-otp-btn').style.display = 'none';
+                    document.getElementById('verify-otp-btn').style.display = 'none';
+                } else {
+                    document.getElementById('otp-status').textContent = result.error;
+                    document.getElementById('otp-status').style.color = '#B71C1C';
+                }
+            } catch (err) {
+                alert('Communication breakdown.');
+            } finally {
+                btn.disabled = false;
+                btn.textContent = 'Verify';
+            }
+        }
+
+        function isPasswordStrong(password) {
+            const minLength = 8;
+            const hasNumber = /\d/.test(password);
+            const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+            return password.length >= minLength && hasNumber && hasSymbol;
+        }
 
         function changeStep(delta) {
             // Validation before moving forward
             if (delta > 0) {
+                if (currentStep === 1 && !isEmailVerified) {
+                    alert('Identity Verification Required. Please verify your email via OTP to continue.');
+                    return;
+                }
+                if (currentStep === 1) {
+                    const pass = document.querySelector('input[name="password"]').value;
+                    if (!isPasswordStrong(pass)) {
+                        alert('Strength Required: Portal password must be at least 8 characters long and include a number and a symbol (!@#$%^&*, etc).');
+                        return;
+                    }
+                }
                 const currentStage = document.getElementById(`step-${currentStep}`);
                 const inputs = currentStage.querySelectorAll('input[required], select[required]');
                 let valid = true;
@@ -368,7 +477,9 @@
             btn.textContent = 'Transmitting...';
 
             const formData = new FormData(e.target);
-
+            // Ensure disabled email is included
+            formData.set('email', document.getElementById('driver-email').value);
+            
             try {
                 const res = await fetch(`${API_BASE_URL}/api/driver/register`, {
                     method: 'POST',

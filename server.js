@@ -62,6 +62,9 @@ app.get('/driver-register', (req, res) => res.sendFile(path.join(__dirname, 'pub
 app.get('/vendor-login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vendor-login.html')));
 app.get('/terms', (req, res) => res.sendFile(path.join(__dirname, 'public', 'terms.html')));
 
+// --- DRIVER ONBOARDING OTP STORAGE ---
+const registrationOtps = new Map(); // email -> otp
+
 // Global DB
 let db;
 
@@ -634,6 +637,64 @@ app.post('/api/driver/login', async (req, res) => {
     }
 });
 
+// --- DRIVER REGISTRATION OTP FLOW ---
+app.post('/api/driver/register/send-otp', async (req, res) => {
+    try {
+        const { email } = req.body;
+        if (!email) return res.status(400).json({ error: 'Email is required for verification.' });
+
+        // Check if email already in use
+        const [existing] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
+        const [existingApp] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
+        if (existing.length > 0 || existingApp.length > 0) {
+            return res.status(400).json({ error: 'This email is already registered or has a pending application.' });
+        }
+
+        const otp = Math.floor(100000 + Math.random() * 900000).toString();
+        registrationOtps.set(email, { otp, expiry: Date.now() + 10 * 60 * 1000 }); // 10 min expiry
+
+        const subject = 'CityRide Pilot Identity Verification';
+        const html = `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; border-radius: 10px;">
+                <h2 style="color: #B71C1C;">Pilot Recruitment Hub</h2>
+                <p>Greetings, Pilot. You are attempting to register with the CityRide Network.</p>
+                <div style="background: #f9f9f9; padding: 20px; border-radius: 8px; text-align: center; margin: 20px 0;">
+                    <span style="font-size: 24px; font-weight: bold; letter-spacing: 5px; color: #333;">${otp}</span>
+                </div>
+                <p>Enter this verification token in your registration portal to continue. This code is valid for 10 minutes.</p>
+                <p style="font-size: 0.8rem; color: #888;">If you did not request this, please ignore this email.</p>
+            </div>
+        `;
+
+        await sendBrevoMail(email, subject, html);
+        res.json({ success: true, message: 'Verification token dispatched to your inbox.' });
+    } catch (err) {
+        console.error('OTP Dispatch Error:', err.message);
+        res.status(500).json({ error: 'Neural Link failed (Email System Offline).' });
+    }
+});
+
+app.post('/api/driver/register/verify-otp', (req, res) => {
+    const { email, otp } = req.body;
+    if (!email || !otp) return res.status(400).json({ error: 'Email and token are required.' });
+
+    const stored = registrationOtps.get(email);
+    if (!stored) return res.status(400).json({ error: 'No verification request found for this email.' });
+
+    if (Date.now() > stored.expiry) {
+        registrationOtps.delete(email);
+        return res.status(400).json({ error: 'Verification token expired. Please request a new one.' });
+    }
+
+    if (stored.otp !== otp) {
+        return res.status(400).json({ error: 'Invalid verification token.' });
+    }
+
+    // Mark as verified
+    stored.verified = true;
+    res.json({ success: true, message: 'Identity verified. You may now continue your application.' });
+});
+
 // --- DRIVER REGISTRATION (MULTI-STEP WITH DOCS) ---
 app.post('/api/driver/register', upload.fields([
     { name: 'dl_front', maxCount: 1 },
@@ -652,6 +713,12 @@ app.post('/api/driver/register', upload.fields([
         // Validation
         if (!name || !email || !password || !phone) {
             return res.status(400).json({ error: 'Core identity details are required.' });
+        }
+
+        // Verify OTP Status
+        const otpStatus = registrationOtps.get(email);
+        if (!otpStatus || !otpStatus.verified) {
+            return res.status(401).json({ error: 'Identity Verification Required. Please verify your email via OTP first.' });
         }
 
         // Check availability

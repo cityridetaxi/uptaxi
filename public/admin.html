@@ -1157,7 +1157,8 @@
                                 <td>#APP-${app.id}</td>
                                 <td>
                                     <strong>${app.name}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${app.email}</span>
+                                    <span style="font-size:0.8rem; color:#888">${app.email}</span><br>
+                                    <span style="font-size:0.85rem; color:var(--primary-red); font-weight:700;">${app.phone}</span>
                                 </td>
                                 <td>
                                     ${app.car_model}<br>
@@ -1497,6 +1498,7 @@
         // Application Management Functions
         function viewApplication(app) {
             const viewer = document.getElementById('doc-viewer-content');
+            document.querySelector('#doc-modal h3').textContent = `Verify: ${app.name} (${app.phone})`;
             viewer.innerHTML = '';
             
             const docs = [

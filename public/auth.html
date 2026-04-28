@@ -215,6 +215,13 @@
             fields.style.display = role === 'driver' ? 'block' : 'none';
         }
 
+        function isPasswordStrong(password) {
+            const minLength = 8;
+            const hasNumber = /\d/.test(password);
+            const hasSymbol = /[!@#$%^&*(),.?":{}|<>]/.test(password);
+            return password.length >= minLength && hasNumber && hasSymbol;
+        }
+
         function switchAuth(type) {
             document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
             document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
@@ -292,6 +299,10 @@
                 otp: document.getElementById('reg-otp').value,
                 role: 'user'
             };
+
+            if (!isPasswordStrong(data.password)) {
+                return alert('Strength Required: Password must be at least 8 characters long and include a number and a symbol (!@#$%^&*, etc).');
+            }
 
             if (!data.otp) return alert('Please verify your email first.');
             if (!document.getElementById('reg-terms').checked) return alert('Please accept the terms and conditions.');

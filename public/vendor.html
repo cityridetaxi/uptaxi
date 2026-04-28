@@ -342,12 +342,10 @@
                         <h4 style="color:#856404; margin-bottom: 0.5rem;">Important Calculation Rules:</h4>
                         <ul style="font-size: 0.85rem; color: #666; padding-left: 1.2rem;">
                             <li>GST (5%) is added to the base ride fare automatically.</li>
-                            <li><b>Dynamic Surge (Morning/Evening):</b> Applies to Local rides. 
-                                <br>• Morning: 8 AM (5%) to 10 AM (25%), then normal by 11 AM.
-                                <br>• Evening: 4 PM (5%) to 6 PM (25%), then normal by 9 PM.</li>
-                            <li>For Outstation One-Way, a flat convenience fee of ₹400 is added in lieu of return travel for both Sedan and SUV.</li>
-                            <li>For Round-Trips, multiple day calculations apply min 250KM per calendar day plus daily Driver Bata.</li>
-                            <li>Rental packages extra fees vary by tier. Base extra is ₹18/KM & ₹150/Hr (Sedan) dropping to ₹15/KM & ₹120/Hr for longer tiers. SUV base extra is ₹25/KM & ₹250/Hr dropping to ₹20/KM & ₹200/Hr.</li>
+                            <li><b>Dynamic Peak Surcharge:</b> A flat 25% applies to Local rides during high-traffic windows. 
+                                <br>• Morning: 8 AM – 11 AM | Evening: 4 PM – 9 PM.</li>
+                            <li><b>Driver Bata (Pilot Allowance):</b> Integrated as ₹400 for first 250 KM, then ₹600 for longer trips. (Applies to Outstation One-Way and Round-Trips).</li>
+                            <li><b>Minimum Distance:</b> Outstation One-Way (130 KM), Round-Trip (250 KM), Bike (5 KM).</li>
                             <li>Markup is strictly your profit and does not incur company commission.</li>
                         </ul>
                     </div>
@@ -417,15 +415,15 @@
         const pricing = {
             bike: {
                 name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1,
-                local: { base: 50, perKm: 10, minKm: 4 },
-                oneway: { base: 140, perKm: 10, minKm: 4, convenience: 0 },
+                local: { base: 0, perKm: 10, minKm: 5 },
+                oneway: { base: 0, perKm: 10, minKm: 5, convenience: 0 },
                 round: null, rental: null
             },
             sedan: {
                 name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4,
-                local: { base: 250, perKm: 25, minKm: 10 },
-                oneway: { base: 0, perKm: 13, minKm: 130, convenience: 400 },
-                round: { base: 0, perKm: 12, minKmPerDay: 250, driverAllowance: 400 },
+                local: { base: 200, perKm: 25, minKm: 0 },
+                oneway: { base: 0, perKm: 13, minKm: 130 },
+                round: { base: 0, perKm: 12, minKmPerDay: 250 },
                 rental: { 
                     '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
                     '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
@@ -435,9 +433,9 @@
             },
             suv: {
                 name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6,
-                local: { base: 350, perKm: 35, minKm: 10 },
-                oneway: { base: 0, perKm: 19, minKm: 130, convenience: 400 },
-                round: { base: 0, perKm: 18, minKmPerDay: 250, driverAllowance: 500 },
+                local: { base: 300, perKm: 35, minKm: 0 },
+                oneway: { base: 0, perKm: 19, minKm: 130 },
+                round: { base: 0, perKm: 18, minKmPerDay: 250 },
                 rental: { 
                     '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
                     '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
@@ -555,25 +553,10 @@
                         if (!timeStr) return 0;
                         const [h, m] = timeStr.split(':').map(Number);
                         const tm = h * 60 + m;
-                        // Morning Peak: 8:00 AM - 11:00 AM (Dynamic)
-                        if (tm >= 480 && tm < 600) { // 8 AM to 10 AM (Step up 5% every 30m)
-                            const steps = Math.floor((tm - 480) / 30);
-                            return 0.05 + (steps * 0.05); 
-                        }
-                        if (tm >= 600 && tm < 660) { // 10 AM to 11 AM (Step down)
-                            const steps = Math.floor((tm - 600) / 30);
-                            return 0.25 - (steps * 0.125); 
-                        }
-                        // Evening Peak: 4:00 PM - 9:00 PM (Dynamic)
-                        if (tm >= 960 && tm < 1080) { // 4 PM to 6 PM (Step up 5% every 30m)
-                            const steps = Math.floor((tm - 960) / 30);
-                            return 0.05 + (steps * 0.05); 
-                        }
-                        if (tm >= 1080 && tm < 1260) { // 6 PM to 9 PM (Step down every 30m)
-                            const steps = Math.floor((tm - 1080) / 30);
-                            const surcharge = 0.25 - (steps * 0.05); 
-                            return Math.max(0, surcharge);
-                        }
+                        // Morning Peak: 8 AM to 11 AM
+                        if (tm >= 480 && tm <= 660) return 0.25;
+                        // Evening Peak: 4 PM to 9 PM
+                        if (tm >= 960 && tm <= 1260) return 0.25;
                         return 0;
                     };
 
@@ -583,19 +566,24 @@
                         const extraKm = Math.max(0, currentDistance - config.minKm);
                         const baseCharge = config.base + (extraKm * config.perKm);
                         const peakCharge = baseCharge * peakMult;
-                        if (peakMult > 0) peakLabel = ` [Peak +${Math.round(peakMult*100)}%]`;
+                        if (peakMult > 0) peakLabel = ` [Peak +25%]`;
                         
                         const minBill = vType === 'suv' ? 300 : (vType === 'sedan' ? 200 : 50);
                         baseFare = Math.max(minBill, baseCharge + peakCharge);
                     } else if (tType === 'oneway') {
                         const billableKm = Math.max(currentDistance, 130);
-                        baseFare = (billableKm * config.perKm) + config.convenience;
+                        const driverAllowance = billableKm > 250 ? 600 : 400;
+                        baseFare = (billableKm * config.perKm) + (vType === 'bike' ? 0 : driverAllowance);
                     } else if (tType === 'round') {
-                        const billableKm = Math.max(currentDistance * 2, 250, config.minKmPerDay * tripDays);
-                        baseFare = (billableKm * config.perKm) + (config.driverAllowance * tripDays);
+                        const billableKm = Math.max(currentDistance * 2, 250, (config.minKmForTrip || 250) * tripDays);
+                        const driverAllowance = billableKm > 250 ? 600 : 400;
+                        baseFare = (billableKm * config.perKm) + (vType === 'bike' ? 0 : driverAllowance * tripDays);
                     } else if (tType === 'rental') {
+                        if (!info.rental) return;
                         const pkg = document.getElementById('rental-package').value;
-                        baseFare = info.rental[pkg].base;
+                        const config = info.rental[pkg];
+                        if (!config) return;
+                        baseFare = config.base;
                     }
 
                     baseFare = Math.ceil(baseFare * 1.05); // Incl GST
