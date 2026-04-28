@@ -162,7 +162,7 @@
                 
                 <div style="margin-top: 2rem; padding-top: 1.5rem; border-top: 1px dashed rgba(0,0,0,0.1); text-align: center;">
                     <p style="font-size: 0.85rem; color: #666; margin-bottom: 0.8rem;">Are you a CityRide Partner?</p>
-                    <button type="button" class="btn" style="width: 100%; border: 1px solid var(--primary-red); color: var(--primary-red); font-weight: 700;" onclick="window.location.href='driver-login.html'">Driver Login Portal</button>
+                    <button type="button" class="btn" style="width: 100%; border: 1px solid var(--primary-red); color: var(--primary-red); font-weight: 700;" onclick="window.location.href='/driver-login'">Driver Login Portal</button>
                 </div>
             </form>
 
@@ -195,14 +195,14 @@
 
                 <div class="checkbox-group">
                     <input type="checkbox" id="reg-terms" required>
-                    <label for="reg-terms">i have accept the <a href="terms.html" target="_blank">terms and conditions</a>.</label>
+                    <label for="reg-terms">i have accept the <a href='/terms' target="_blank">terms and conditions</a>.</label>
                 </div>
 
                 <button type="submit" class="btn btn-primary btn-large">Finalize Registration</button>
             </form>
 
             <div class="auth-footer" style="text-align: left;">
-                <a href="index.html" class="btn-back" title="Back to Home">←</a>
+                <a href='/' class="btn-back" title="Back to Home">←</a>
             </div>
         </div>
     </div>
@@ -245,7 +245,7 @@
                 if (res.ok) {
                     // This is only for travelers/passengers
                     localStorage.setItem('cityride_member', JSON.stringify(result.user));
-                    window.location.href = 'index.html';
+                    window.location.href = '/';
                 } else {
                     alert(result.error);
                 }

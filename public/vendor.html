@@ -452,7 +452,7 @@
 
         // Check Auth
         const vendorData = JSON.parse(localStorage.getItem('cityride_vendor'));
-        if (!vendorData) window.location.href = 'vendor-login.html';
+        if (!vendorData) window.location.href = '/vendor-login';
 
         document.getElementById('vendor-welcome').textContent = `Welcome back, ${vendorData.business_name} (${vendorData.name})`;
 
@@ -513,6 +513,17 @@
             }
 
             await updateDistance();
+
+            // City limits logic
+            if (currentCategory === 'local' && currentDistance > 50) {
+                alert('Route exceeds the Local City Limit (50 KM). Switching to Outstation mode for long distance travel.');
+                const outstationEl = Array.from(document.querySelectorAll('.category-btn')).find(b => b.textContent.includes('Outstation'));
+                if (outstationEl) {
+                    return setCategory('outstation', outstationEl);
+                }
+                container.innerHTML = '';
+                return;
+            }
             
             // Update distance display immediately
             document.getElementById('dist-display').textContent = currentCategory === 'rental' ? 'N/A' : `${currentDistance} KM`;
@@ -863,7 +874,7 @@
 
         function logoutVendor() {
             localStorage.removeItem('cityride_vendor');
-            window.location.href = 'vendor-login.html';
+            window.location.href = '/vendor-login';
         }
     </script>
 </body>

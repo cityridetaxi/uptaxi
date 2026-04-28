@@ -167,7 +167,7 @@
     <div class="admin-login-container">
         <div class="login-card">
             <div class="security-badge">Secure Gateway</div>
-            <div class="logo" style="margin-bottom: 2rem; cursor: pointer;" onclick="window.location.href='index.html'">
+            <div class="logo" style="margin-bottom: 2rem; cursor: pointer;" onclick="window.location.href='/'">
                 <img src="logo.png" alt="CityRideTaxi" style="height: 50px; width: auto;">
             </div>
             <h2>Mainframe Login</h2>
@@ -205,7 +205,7 @@
 
                 if (res.ok) {
                     localStorage.setItem('cityride_master', JSON.stringify(result.user));
-                    window.location.href = 'admin.html';
+                    window.location.href = '/admin';
                 } else {
                     alert('Invalid credentials. Access attempt logged.');
                 }

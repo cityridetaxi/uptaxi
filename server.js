@@ -14,6 +14,16 @@ app.use(cors());
 app.use(bodyParser.json());
 app.use(express.static('public'));
 
+// Clean Navigation Routes
+app.get('/driver', (req, res) => res.sendFile(path.join(__dirname, 'public', 'driver.html')));
+app.get('/vendor', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vendor.html')));
+app.get('/admin', (req, res) => res.sendFile(path.join(__dirname, 'public', 'admin.html')));
+app.get('/dashboard', (req, res) => res.sendFile(path.join(__dirname, 'public', 'dashboard.html')));
+app.get('/auth', (req, res) => res.sendFile(path.join(__dirname, 'public', 'auth.html')));
+app.get('/driver-login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'driver-login.html')));
+app.get('/vendor-login', (req, res) => res.sendFile(path.join(__dirname, 'public', 'vendor-login.html')));
+
+
 // Global DB
 let db;
 

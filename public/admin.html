@@ -571,7 +571,7 @@
         </div>
     </div>
     <aside class="sidebar" id="admin-sidebar">
-        <div class="logo" onclick="window.location.href='index.html'" style="cursor:pointer;">
+        <div class="logo" onclick="window.location.href='/'" style="cursor:pointer;">
             <img src="logo.png" alt="CityRideTaxi" style="height: 50px; width: auto;">
         </div>
         <div class="sidebar-nav">
@@ -938,7 +938,7 @@
         // Check if admin is logged in (Role Isolation)
         const user = JSON.parse(localStorage.getItem('cityride_master'));
         if (!user) {
-            window.location.href = 'admin-login.html';
+            window.location.href = '/admin-login';
         }
 
         function switchTab(tabId, el) {
@@ -1199,7 +1199,7 @@
 
         function logoutAdmin() {
             localStorage.removeItem('cityride_master');
-            window.location.href = 'admin-login.html';
+            window.location.href = '/admin-login';
         }
 
         // Handle Driver Creation

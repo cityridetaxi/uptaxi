@@ -9,22 +9,22 @@ const VEHICLE_ICONS = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
-    const isLandingPage = window.location.pathname.endsWith('index.html') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
-    const isAuthPage = window.location.pathname.includes('auth.html') || window.location.pathname.includes('login.html');
+    const isLandingPage = window.location.pathname.endsWith('/') || window.location.pathname === '/' || window.location.pathname.endsWith('/');
+    const isAuthPage = window.location.pathname.includes('/auth') || window.location.pathname.includes('/login');
 
     const member = JSON.parse(localStorage.getItem('cityride_member'));
     const pilot = JSON.parse(localStorage.getItem('cityride_pilot'));
     const master = JSON.parse(localStorage.getItem('cityride_master'));
 
     // 1. Landing Page Logic (Home)
-    // We NO LONGER force redirect admins/pilots away from index.html
+    // We NO LONGER force redirect admins/pilots away from /
     // This allows you to browse the home page even if you have an admin session active.
 
-    // 2. Auth Guard for Landing Page (index.html)
+    // 2. Auth Guard for Landing Page (/)
     // If you are on the landing page and NOT logged in as a passenger, we show login.
-    // (Optional: You can remove this if you want index.html to be public)
+    // (Optional: You can remove this if you want / to be public)
     if (isLandingPage && !member && !master && !pilot) {
-        window.location.href = 'auth.html';
+        window.location.href = '/auth';
         return;
     }
 
@@ -156,6 +156,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 if (data.routes && data.routes.length > 0) {
                     const distanceInKm = Math.ceil(data.routes[0].distance / 1000);
+                    
+                    if (currentCategory === 'local' && distanceInKm > 50) {
+                        alert('Route exceeds the Local City Limit (50 KM). Automatic switch to Outstation mode applied.');
+                        const outstationBtn = Array.from(categoryBtns).find(b => b.dataset.category === 'outstation');
+                        if (outstationBtn) return outstationBtn.click();
+                    }
+
                     renderVehicleOptions(distanceInKm);
                 }
             } catch (err) {
@@ -638,7 +645,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateVehicleSelection();
 
                 // Redirect to Travelers Hub
-                window.location.href = 'dashboard.html';
+                window.location.href = '/dashboard';
             } else {
                 const errData = await response.json();
                 console.error('Server Booking Error:', errData);
@@ -657,7 +664,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const user = JSON.parse(localStorage.getItem('cityride_member'));
         if (!user) {
             alert('Please login to CityRideTaxi to confirm your booking.');
-            window.location.href = 'auth.html';
+            window.location.href = '/auth';
             return;
         }
 
@@ -713,13 +720,13 @@ document.addEventListener('DOMContentLoaded', () => {
             if (heroDashBtn) {
                 if (member) {
                     heroDashBtn.textContent = 'My Dashboard';
-                    heroDashBtn.onclick = () => window.location.href = 'dashboard.html';
+                    heroDashBtn.onclick = () => window.location.href = '/dashboard';
                 } else if (pilot) {
                     heroDashBtn.textContent = 'Driver Portal';
-                    heroDashBtn.onclick = () => window.location.href = 'driver.html';
+                    heroDashBtn.onclick = () => window.location.href = '/driver';
                 } else if (master) {
                     heroDashBtn.textContent = 'Admin Control';
-                    heroDashBtn.onclick = () => window.location.href = 'admin.html';
+                    heroDashBtn.onclick = () => window.location.href = '/admin';
                 }
             }
         } else {
@@ -740,7 +747,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (member) {
                 const li = document.createElement('li');
                 li.className = 'auth-link';
-                li.innerHTML = `<a href="dashboard.html" style="color:var(--primary-red); font-weight:700;">My Dashboard</a>`;
+                li.innerHTML = `<a href='/dashboard' style="color:var(--primary-red); font-weight:700;">My Dashboard</a>`;
                 navLinks.insertBefore(li, navLinks.firstChild);
             }
 
@@ -748,7 +755,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (pilot) {
                 const li = document.createElement('li');
                 li.className = 'auth-link';
-                li.innerHTML = `<a href="driver.html" style="color:#FFD700; font-weight:700;">Pilot Portal</a>`;
+                li.innerHTML = `<a href='/driver' style="color:#FFD700; font-weight:700;">Pilot Portal</a>`;
                 navLinks.appendChild(li);
             }
 
@@ -756,7 +763,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (master) {
                 const li = document.createElement('li');
                 li.className = 'auth-link';
-                li.innerHTML = `<a href="admin.html" style="color:#00FF00; font-weight:700;">Control Center</a>`;
+                li.innerHTML = `<a href='/admin' style="color:#00FF00; font-weight:700;">Control Center</a>`;
                 navLinks.appendChild(li);
             }
 
@@ -776,7 +783,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (bookBtn) {
                 if (member) {
                     bookBtn.textContent = 'Traveler Hub';
-                    bookBtn.onclick = () => window.location.href = 'dashboard.html';
+                    bookBtn.onclick = () => window.location.href = '/dashboard';
                 } else {
                     bookBtn.textContent = 'Book Now';
                     bookBtn.onclick = () => window.location.href = '#booking';
@@ -792,7 +799,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const li = document.createElement('li');
             li.className = 'auth-link';
-            li.innerHTML = `<a href="auth.html">Login</a>`;
+            li.innerHTML = `<a href='/auth'>Login</a>`;
             navLinks.appendChild(li);
 
             // ADDED: Book Now button for mobile burger menu (Guest Mode)
@@ -817,14 +824,14 @@ document.addEventListener('DOMContentLoaded', () => {
     const mainLogo = document.querySelector('.logo');
     if (mainLogo) {
         mainLogo.addEventListener('dblclick', () => {
-            if (confirm("Enter Admin Panel?")) window.location.href = 'admin.html';
+            if (confirm("Enter Admin Panel?")) window.location.href = '/admin';
         });
     }
 });
 
 /**
  * GOOGLE MAPS INTEGRATION NOTES:
- * To enable real distance calculation, add the following script to index.html:
+ * To enable real distance calculation, add the following script to /:
  * <script src="https://maps.googleapis.com/maps/api/js?key=YOUR_API_KEY&libraries=places"></script>
  * 
  * Then use:

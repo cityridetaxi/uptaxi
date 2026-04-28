@@ -91,7 +91,7 @@
     <div class="auth-container">
         <div class="auth-card">
             <div class="partner-badge">Partner Portal</div>
-            <div class="logo" style="margin-bottom: 3rem; text-align: left; cursor: pointer;" onclick="window.location.href='index.html'">
+            <div class="logo" style="margin-bottom: 3rem; text-align: left; cursor: pointer;" onclick="window.location.href='/'">
                 <img src="logo.png" alt="CityRideTaxi" style="height: 50px; width: auto;">
             </div>
 
@@ -114,7 +114,7 @@
             </div>
 
             <div style="margin-top: 3rem; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 2rem;">
-                <a href="index.html" class="btn-back" style="color:white" title="Return to Main Hub">←</a>
+                <a href='/' class="btn-back" style="color:white" title="Return to Main Hub">←</a>
             </div>
         </div>
     </div>
@@ -136,7 +136,7 @@
 
                 if (res.ok) {
                     localStorage.setItem('cityride_pilot', JSON.stringify(result.user));
-                    window.location.href = 'driver.html';
+                    window.location.href = '/driver';
                 } else {
                     alert(result.error);
                 }

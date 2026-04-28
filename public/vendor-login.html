@@ -74,7 +74,7 @@
             </div>
             <button type="submit" class="btn-login">Verify Credentials</button>
         </form>
-        <a href="index.html" class="footer-link">Return to Public Portal</a>
+        <a href='/' class="footer-link">Return to Public Portal</a>
     </div>
 
     <script>
@@ -92,7 +92,7 @@
                 const data = await res.json();
                 if (res.ok) {
                     localStorage.setItem('cityride_vendor', JSON.stringify(data.user));
-                    window.location.href = 'vendor.html';
+                    window.location.href = '/vendor';
                 } else {
                     alert(data.error);
                 }

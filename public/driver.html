@@ -182,7 +182,7 @@
     </div>
     <header class="header">
         <nav class="container nav">
-            <div class="logo" onclick="window.location.href='index.html'" style="cursor:pointer;">
+            <div class="logo" onclick="window.location.href='/'" style="cursor:pointer;">
                 <img src="logo.png" alt="CityRideTaxi" style="height: 50px; width: auto;">
             </div>
             <div class="driver-nav-actions">
@@ -299,7 +299,7 @@
         document.addEventListener('DOMContentLoaded', async () => {
             const user = JSON.parse(localStorage.getItem('cityride_pilot'));
             if (!user) {
-                window.location.href = 'driver-login.html';
+                window.location.href = '/driver-login';
                 return;
             }
 
@@ -719,7 +719,7 @@
 
         function logoutUser() {
             localStorage.removeItem('cityride_pilot');
-            window.location.href = 'driver-login.html';
+            window.location.href = '/driver-login';
         }
 
         function openOpportunityModal(jobId = null) {

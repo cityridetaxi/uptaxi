@@ -311,11 +311,11 @@
     </div>
     <header class="header">
         <nav class="container nav">
-            <div class="logo" onclick="window.location.href='index.html'" style="cursor:pointer; display: flex; align-items: center;">
+            <div class="logo" onclick="window.location.href='/'" style="cursor:pointer; display: flex; align-items: center;">
                 <img src="logo.png" alt="CityRideTaxi Logo" style="height: 50px; width: auto;">
             </div>
             <div class="driver-nav-actions" style="display: flex; gap: 0.8rem; align-items: center;">
-                <button class="btn" onclick="window.location.href='index.html'"
+                <button class="btn" onclick="window.location.href='/'"
                     style="padding: 0.6rem 1rem; font-size: 0.85rem; border: 1px solid var(--accents); background: var(--white); color: var(--dark-charcoal);">Home</button>
                 <button class="btn btn-primary" onclick="logoutUser()"
                     style="padding: 0.6rem 1rem; font-size: 0.85rem; background: var(--primary-red); border: none;">Logout</button>
@@ -330,7 +330,7 @@
                     <h1>Welcome back, <span id="user-name" class="text-accent">User</span></h1>
                     <p>Track your premium journey history and current bookings.</p>
                 </div>
-                <button class="btn btn-primary" onclick="window.location.href='index.html'">Book New Ride</button>
+                <button class="btn btn-primary" onclick="window.location.href='/'">Book New Ride</button>
             </div>
 
             <!-- CityRide Stats Bar -->
@@ -452,7 +452,7 @@
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('cityride_member'));
             if (!user) {
-                window.location.href = 'auth.html';
+                window.location.href = '/auth';
                 return;
             }
 
@@ -601,7 +601,7 @@
 
         function logoutUser() {
             localStorage.removeItem('cityride_member');
-            window.location.href = 'auth.html';
+            window.location.href = '/auth';
         }
 
         //  Cancel Ride 
