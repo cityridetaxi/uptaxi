@@ -30,14 +30,27 @@
         }
 
         .sidebar {
-            width: 260px;
+            width: 280px;
             background: var(--admin-sidebar);
             color: white;
-            padding: 2rem;
+            padding: 2.5rem 1.5rem;
             display: flex;
             flex-direction: column;
             flex-shrink: 0;
-            transition: var(--transition);
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            height: 100vh;
+            position: sticky;
+            top: 0;
+            overflow-y: auto;
+            padding-bottom: 4rem;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255,255,255,0.1);
+            border-radius: 10px;
         }
 
         .sidebar .logo {
@@ -47,11 +60,14 @@
 
         .sidebar-nav {
             flex-grow: 1;
+            display: flex;
+            flex-direction: column;
+            min-height: min-content;
         }
 
         .nav-item {
-            padding: 1.2rem;
-            margin-bottom: 0.5rem;
+            padding: 1rem 1.2rem;
+            margin-bottom: 0.4rem;
             border-radius: 12px;
             cursor: pointer;
             transition: all 0.3s ease;
@@ -59,6 +75,12 @@
             align-items: center;
             gap: 1rem;
             opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        .logout-item {
+            margin-top: 2rem;
+            border-top: 1px solid rgba(255,255,255,0.05);
+            padding-top: 2rem;
         }
 
         .nav-item:hover,
@@ -179,6 +201,7 @@
             padding: 1.5rem;
             border-bottom: 1px solid #f8f8f8;
             font-size: 0.95rem;
+            vertical-align: top;
         }
 
         .status-tag {
@@ -528,6 +551,90 @@
             .burger-menu.active span:nth-child(3) {
                 transform: translateY(-7px) rotate(-45deg);
             }
+
+            #tariff-fields-container {
+                grid-template-columns: 1fr !important;
+            }
+
+            #create-vendor-form, #create-driver-form {
+                grid-template-columns: 1fr !important;
+            }
+
+            /* Responsive Table Strategy */
+            .cityride-table thead {
+                display: none;
+            }
+            .cityride-table, .cityride-table tbody, .cityride-table tr, .cityride-table td {
+                display: block;
+                width: 100%;
+            }
+            .cityride-table tr {
+                margin-bottom: 1.5rem;
+                background: white;
+                border: 1px solid #f0f0f0;
+                border-radius: 16px;
+                padding: 1.25rem;
+                box-shadow: 0 4px 10px rgba(0,0,0,0.02);
+            }
+            .cityride-table td {
+                border: none;
+                padding: 0.75rem 0;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: right;
+                border-bottom: 1px solid #fafafa;
+            }
+            .cityride-table td:last-child {
+                border-bottom: none;
+                margin-top: 0.5rem;
+            }
+            .cityride-table td::before {
+                content: attr(data-label);
+                font-weight: 800;
+                text-transform: uppercase;
+                font-size: 0.65rem;
+                color: #999;
+                text-align: left;
+                margin-right: 1rem;
+            }
+        }
+
+        /* Pilot Info Block Styles */
+        .pilot-info-block {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            text-align: left;
+            min-width: 180px;
+        }
+        .pilot-info-block .p-name {
+            font-weight: 700;
+            color: #1a1a1a;
+            font-size: 0.9rem;
+            line-height: 1.2;
+        }
+        .pilot-info-block .p-email a {
+            font-size: 0.75rem;
+            color: #1565c0;
+            text-decoration: none;
+            font-weight: 600;
+            display: block;
+            margin-top: 1px;
+        }
+        .pilot-info-block .p-phone a {
+            font-size: 0.75rem;
+            color: var(--primary-red);
+            text-decoration: none;
+            font-weight: 700;
+            display: block;
+        }
+        
+        @media (max-width: 1024px) {
+            .pilot-info-block {
+                text-align: right;
+                align-items: flex-end;
+            }
         }
     </style>
 </head>
@@ -581,10 +688,12 @@
             <div class="nav-item" onclick="switchTab('cancellations', this)">🛑 Abort Requests</div>
             <div class="nav-item" onclick="switchTab('drivers', this)">🏎️ Manage Drivers</div>
             <div class="nav-item" onclick="switchTab('applications', this)">📋 Pilot Applications</div>
+            <div class="nav-item" onclick="switchTab('app-history', this)">📜 Application History</div>
             <div class="nav-item" onclick="switchTab('users', this)">👥 Member Registry</div>
             <div class="nav-item" onclick="switchTab('vendors', this)">🤝 Network Partners</div>
+            <div class="nav-item" onclick="switchTab('tariffs', this)">💰 Rate Tariffs</div>
         </div>
-        <div class="nav-item" onclick="logoutAdmin()">🚪 Sign Out</div>
+        <div class="nav-item logout-item" onclick="logoutAdmin()">🚪 Sign Out</div>
     </aside>
 
     <main class="main-stage">
@@ -729,7 +838,7 @@
                             <th>Pilot ID</th>
                             <th>Details</th>
                             <th>Vehicle ID</th>
-                            <th>Type</th>
+                            <th>Category</th>
                             <th>Model</th>
                             <th>Wallet</th>
                             <th>Actions</th>
@@ -767,6 +876,30 @@
             </div>
         </div>
 
+        <!-- Pilot Application History Tab -->
+        <div id="app-history" class="tab-section">
+            <div class="stage-header">
+                <h1>Application <span class="text-accent">History</span></h1>
+                <p>Record of all authorized platform partners.</p>
+            </div>
+            <div class="data-table-container">
+                <table class="cityride-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Pilot</th>
+                            <th>Vehicle</th>
+                            <th>Authorized On</th>
+                            <th>Docs</th>
+                        </tr>
+                    </thead>
+                    <tbody id="app-history-table-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Users Tab -->
         <div id="users" class="tab-section">
             <div class="stage-header">
@@ -777,9 +910,7 @@
                     <thead>
                         <tr>
                             <th>Member ID</th>
-                            <th>Customer Name</th>
-                            <th>Email Address</th>
-                            <th>Phone Number</th>
+                            <th>Details</th>
                             <th>Registration Date</th>
                             <th>Actions</th>
                         </tr>
@@ -799,41 +930,38 @@
                 <h1>Business <span class="text-accent">Partners</span></h1>
                 <p>Manage secondary booking dealers and business growth partners.</p>
             </div>
-            
-            <!-- Create Vendor Section -->
-            <div class="data-table-container" style="margin-bottom: 3rem; background: #2c3e50; color: white;">
+            <div class="data-table-container" style="margin-bottom: 3rem; background: var(--admin-sidebar); color: white;">
                 <h3 style="margin-bottom: 2rem;">Induct Business Partner</h3>
                 <form id="create-vendor-form" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
                     <div class="input-group">
+                        <label style="color: rgba(255,255,255,0.7);">Partner ID</label>
+                        <input type="text" id="v-id" placeholder="V-101" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                    </div>
+                    <div class="input-group">
                         <label style="color: rgba(255,255,255,0.7);">Full Name</label>
-                        <input type="text" id="v-name" placeholder="John Doe" required style="background: rgba(255,255,255,0.1); border-color: transparent; color: white;">
+                        <input type="text" id="v-name" placeholder="Contact Person" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
                     </div>
                     <div class="input-group">
                         <label style="color: rgba(255,255,255,0.7);">Business Name</label>
-                        <input type="text" id="v-business" placeholder="Royal Travels" required style="background: rgba(255,255,255,0.1); border-color: transparent; color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Vendor Login ID</label>
-                        <input type="text" id="v-id" placeholder="VENDOR001" required style="background: rgba(255,255,255,0.1); border-color: transparent; color: white;">
+                        <input type="text" id="v-business" placeholder="Travel Agency Name" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
                     </div>
                     <div class="input-group">
                         <label style="color: rgba(255,255,255,0.7);">Email</label>
-                        <input type="email" id="v-email" placeholder="partner@gmail.com" required style="background: rgba(255,255,255,0.1); border-color: transparent; color: white;">
+                        <input type="email" id="v-email" placeholder="vendor@partner.com" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
                     </div>
                     <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Secure Key (Password)</label>
-                        <input type="text" id="v-pass" placeholder="Secret123!" required style="background: rgba(255,255,255,0.1); border-color: transparent; color: white;">
+                        <label style="color: rgba(255,255,255,0.7);">Access Key (Password)</label>
+                        <input type="text" id="v-pass" placeholder="Partner123!" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
                     </div>
                     <div class="input-group">
                         <label style="color: rgba(255,255,255,0.7);">Phone</label>
-                        <input type="text" id="v-phone" placeholder="+91..." required style="background: rgba(255,255,255,0.1); border-color: transparent; color: white;">
+                        <input type="text" id="v-phone" placeholder="9876543210" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
                     </div>
                     <div style="grid-column: span 3;">
-                        <button type="submit" class="btn btn-primary" style="width: 100%; padding: 1.25rem;">Activate Partner Account</button>
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Authorize Partner Dealer</button>
                     </div>
                 </form>
             </div>
-
             <div class="data-table-container">
                 <table class="cityride-table">
                     <thead>
@@ -842,7 +970,7 @@
                             <th>Business Details</th>
                             <th>Contact Info</th>
                             <th>Status</th>
-                            <th>Operations</th>
+                            <th>Actions</th>
                         </tr>
                     </thead>
                     <tbody id="vendors-table-body">
@@ -851,6 +979,32 @@
                 </table>
             </div>
         </div>
+
+        <!-- Tariffs Tab -->
+        <div id="tariffs" class="tab-section">
+            <div class="stage-header">
+                <h1>Rate <span class="text-accent">Tariffs</span></h1>
+                <p>Manage pricing and fare rules for all vehicle categories.</p>
+            </div>
+            <div class="data-table-container">
+                <table class="cityride-table">
+                    <thead>
+                        <tr>
+                            <th>Vehicle</th>
+                            <th>Category</th>
+                            <th>Current Rates</th>
+                            <th>Last Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="tariffs-table-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+            
+
     </main>
 
     <!-- Edit Driver Modal -->
@@ -977,7 +1131,7 @@
             // Close mobile menu if open
             const sidebar = document.getElementById('admin-sidebar');
             const burger = document.getElementById('admin-burger');
-            if (window.innerWidth <= 768) {
+            if (window.innerWidth <= 1024) {
                 sidebar.classList.remove('active');
                 burger.classList.remove('active');
             }
@@ -1013,17 +1167,17 @@
                     bookings.slice(0, 5).forEach(b => {
                         body.innerHTML += `
                             <tr>
-                                <td>#B${b.id}</td>
-                                <td>
+                                <td data-label="Booking ID">#B${b.id}</td>
+                                <td data-label="Customer">
                                     <strong>${b.customer_name}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${b.customer_phone || ''}</span>
+                                    <a href="tel:${b.customer_phone}" style="font-size:0.8rem; color:var(--primary-red); text-decoration:none; font-weight:700;">${b.customer_phone || ''}</a>
                                 </td>
-                                <td style="padding: 1.5rem; text-align: left;">
+                                <td data-label="Route" style="padding: 1.5rem; text-align: left;">
                                     <span style="font-size:0.65rem; font-weight:800; color:#B71C1C; text-transform:uppercase; background:#fbe9e7; padding:2px 6px; border-radius:4px; margin-bottom:0.3rem; display:inline-block;">${(b.trip_type === 'round' ? 'Round Trip' : (b.trip_type === 'rental' ? 'Local Rental' : (b.trip_type || 'One Way').replace('_', ' ')))}</span><br>
                                     ${b.pickup_loc} → ${b.drop_loc}
                                 </td>
-                                <td><span class="status-tag status-${b.status}">${b.status}</span></td>
-                                <td>${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Abort</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
+                                <td data-label="Status"><span class="status-tag status-${b.status}">${b.status}</span></td>
+                                <td data-label="Actions">${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Abort</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
                             </tr>
                         `;
                     });
@@ -1036,20 +1190,20 @@
                         const isAssigned = b.status === 'assigned';
                         body.innerHTML += `
                             <tr>
-                                <td>#B${b.id}</td>
-                                <td>
+                                <td data-label="Booking ID">#B${b.id}</td>
+                                <td data-label="Customer">
                                     <strong style="color:var(--primary-red)">${b.customer_name}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${b.customer_phone}</span>
+                                    <a href="tel:${b.customer_phone}" style="font-size:0.8rem; color:var(--primary-red); text-decoration:none; font-weight:700;">${b.customer_phone}</a>
                                 </td>
-                                <td style="padding: 1.5rem; text-align: left;">
+                                <td data-label="Details" style="padding: 1.5rem; text-align: left;">
                                     <span style="font-size:0.65rem; font-weight:800; color:#B71C1C; text-transform:uppercase; background:#fbe9e7; padding:2px 6px; border-radius:4px; margin-bottom:0.3rem; display:inline-block;">${(b.trip_type === 'round' ? 'Round Trip' : (b.trip_type === 'rental' ? 'Local Rental' : (b.trip_type || 'One Way').replace('_', ' ')))}</span><br>
                                     <strong>${b.pickup_loc}</strong><br>
                                     <span style="font-size:0.8rem; color:#888">${b.drop_loc}</span>
                                 </td>
-                                <td>${b.driver_name || '<span style="color:#aaa">Unassigned</span>'}</td>
-                                <td><span class="status-tag status-${b.status}">${b.status}</span></td>
-                                <td>${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Cancel Mission</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
-                                <td>${isAssigned ? `<button class="action-btn" style="color:#1565c0; font-weight:700;" onclick='openTransferModal(${b.id}, ${JSON.stringify(b.driver_name || "Unassigned")}, ${JSON.stringify(b.pickup_loc)}, ${JSON.stringify(b.drop_loc)})'>🔄 Transfer</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
+                                <td data-label="Driver">${b.driver_name || '<span style="color:#aaa">Unassigned</span>'}</td>
+                                <td data-label="Status"><span class="status-tag status-${b.status}">${b.status}</span></td>
+                                <td data-label="Abort">${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Cancel Mission</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
+                                <td data-label="Transfer">${isAssigned ? `<button class="action-btn" style="color:#1565c0; font-weight:700;" onclick='openTransferModal(${b.id}, ${JSON.stringify(b.driver_name || "Unassigned")}, ${JSON.stringify(b.pickup_loc)}, ${JSON.stringify(b.drop_loc)})'>🔄 Transfer</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
                             </tr>
                         `;
                     });
@@ -1061,17 +1215,21 @@
                     drivers.forEach(d => {
                         body.innerHTML += `
                             <tr>
-                                <td>#P${d.id}</td>
-                                <td>
-                                    <strong>${d.name}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${d.email}</span>
+                                <td data-label="Pilot ID">#P${d.id}</td>
+                                <td data-label="Details">
+                                    <div class="pilot-info-block">
+                                        <div class="p-name">${d.name}</div>
+                                        <div class="p-email"><a href="mailto:${d.email}">${d.email}</a></div>
+                                        <div class="p-phone"><a href="tel:${d.phone}">${d.phone || 'N/A'}</a></div>
+                                    </div>
                                 </td>
-                                <td>${d.car_number || '---'}</td>
-                                <td><span style="text-transform:uppercase; font-size:0.8rem; font-weight:700">${d.vehicle_type || 'sedan'}</span></td>
-                                <td>${d.car_model || '---'}</td>
-                                <td><strong style="color:var(--primary-red)">₹${parseFloat(d.wallet_balance || 0).toFixed(2)}</strong></td>
-                                <td>
+                                <td data-label="Vehicle ID">${d.car_number || '---'}</td>
+                                <td data-label="Category"><span style="text-transform:uppercase; font-size:0.8rem; font-weight:700">${d.vehicle_type || 'sedan'}</span></td>
+                                <td data-label="Model">${d.car_model || '---'}</td>
+                                <td data-label="Wallet"><strong style="color:var(--primary-red)">₹${parseFloat(d.wallet_balance || 0).toFixed(2)}</strong></td>
+                                <td data-label="Actions">
                                     <button class="action-btn" onclick='openEditModal(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Edit</button>
+                                    <button class="action-btn" style="color:#2e7d32; margin-left:10px" onclick='viewApplication(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Docs</button>
                                     <button class="action-btn" style="color:#007BFF; margin-left:10px" onclick="openWalletModal(${d.id}, ${d.wallet_balance || 0})">Wallet</button>
                                     <button class="action-btn" style="color:#f39c12; margin-left:10px" onclick="openPasswordModal('driver', ${d.id}, '${d.name}')">Password</button>
                                     <button class="action-btn" style="color:#888; margin-left:10px" onclick="deleteDriver(${d.id})">Revoke</button>
@@ -1087,12 +1245,16 @@
                     passengers.forEach(u => {
                         body.innerHTML += `
                             <tr>
-                                <td>#U${u.id}</td>
-                                <td><strong>${u.name}</strong></td>
-                                <td>${u.email}</td>
-                                <td><strong style="color:var(--primary-red)">${u.phone}</strong></td>
-                                <td>${new Date(u.created_at).toLocaleDateString()}</td>
-                                <td>
+                                <td data-label="Member ID">#U${u.id}</td>
+                                <td data-label="Details">
+                                    <div class="pilot-info-block">
+                                        <div class="p-name">${u.name}</div>
+                                        <div class="p-email"><a href="mailto:${u.email}">${u.email}</a></div>
+                                        <div class="p-phone"><a href="tel:${u.phone}">${u.phone || 'N/A'}</a></div>
+                                    </div>
+                                </td>
+                                <td data-label="Joined">${new Date(u.created_at).toLocaleDateString()}</td>
+                                <td data-label="Actions">
                                     <button class="action-btn" style="color:#f39c12; margin-right:10px" onclick="openPasswordModal('passenger', ${u.id}, '${u.name}')">Reset Password</button>
                                     <button class="action-btn" style="color:#888" onclick="deletePassenger(${u.id})">Revoke Access</button>
                                 </td>
@@ -1107,13 +1269,13 @@
                     bookings.filter(b => b.status === 'cancel_requested').forEach(b => {
                         body.innerHTML += `
                             <tr>
-                                <td>#B${b.id}</td>
-                                <td>
+                                <td data-label="ID">#B${b.id}</td>
+                                <td data-label="Pilot">
                                     <strong>${b.driver_name || 'Pilot'}</strong><br>
                                     <span style="font-size:0.8rem; color:#888">${b.customer_name} (#B${b.id})</span>
                                 </td>
-                                <td style="color:#d32f2f; font-weight:700;">${b.cancel_reason || 'No Reason Provided'}</td>
-                                <td>
+                                <td data-label="Reason" style="color:#d32f2f; font-weight:700;">${b.cancel_reason || 'No Reason Provided'}</td>
+                                <td data-label="Actions">
                                     <button class="action-btn" style="color:#28a745" onclick="approveCancel(${b.id})">Approve Abort</button>
                                     <button class="action-btn" style="color:#dc3545; margin-left:10px" onclick="rejectCancel(${b.id})">Reject</button>
                                 </td>
@@ -1129,17 +1291,17 @@
                     vendors.forEach(v => {
                         body.innerHTML += `
                             <tr>
-                                <td>#V-${v.vendor_id}</td>
-                                <td>
+                                <td data-label="ID">#V-${v.vendor_id}</td>
+                                <td data-label="Business">
                                     <strong>${v.business_name}</strong><br>
                                     <span style="font-size:0.8rem; color:#888">POC: ${v.name}</span>
                                 </td>
-                                <td>
-                                    ${v.email}<br>
-                                    <strong>${v.phone}</strong>
+                                <td data-label="Contact">
+                                    <a href="mailto:${v.email}" style="color:#1565c0; text-decoration:none; font-weight:600;">${v.email}</a><br>
+                                    <a href="tel:${v.phone}" style="color:var(--primary-red); text-decoration:none;"><strong>${v.phone}</strong></a>
                                 </td>
-                                <td><span class="status-tag status-${v.is_blocked ? 'cancelled' : 'completed'}">${v.is_blocked ? 'Blocked' : 'Active'}</span></td>
-                                <td>
+                                <td data-label="Status"><span class="status-tag status-${v.is_blocked ? 'cancelled' : 'completed'}">${v.is_blocked ? 'Blocked' : 'Active'}</span></td>
+                                <td data-label="Actions">
                                     <button class="action-btn" style="color:#888" onclick="deleteVendor(${v.id})">Revoke Partnership</button>
                                 </td>
                             </tr>
@@ -1154,24 +1316,84 @@
                         const hasAllDocs = app.dl_front && app.rc_book && app.aadhar_front;
                         body.innerHTML += `
                             <tr>
-                                <td>#APP-${app.id}</td>
-                                <td>
-                                    <strong>${app.name}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${app.email}</span><br>
-                                    <span style="font-size:0.85rem; color:var(--primary-red); font-weight:700;">${app.phone}</span>
+                                <td data-label="App ID">#APP-${app.id}</td>
+                                <td data-label="Pilot">
+                                    <div class="pilot-info-block">
+                                        <div class="p-name">${app.name}</div>
+                                        <div class="p-email"><a href="mailto:${app.email}">${app.email}</a></div>
+                                        <div class="p-phone"><a href="tel:${app.phone}">${app.phone}</a></div>
+                                    </div>
                                 </td>
-                                <td>
+                                <td data-label="Vehicle">
                                     ${app.car_model}<br>
                                     <strong style="color:var(--primary-red)">${app.car_number}</strong>
                                 </td>
-                                <td>
+                                <td data-label="Documents">
                                     <span class="status-tag ${hasAllDocs ? 'status-completed' : 'status-pending'}">
                                         ${hasAllDocs ? 'Full Set' : 'Incomplete'}
                                     </span>
                                 </td>
-                                <td><span class="status-tag status-${app.status}">${app.status}</span></td>
-                                <td>
+                                <td data-label="Status"><span class="status-tag status-${app.status}">${app.status}</span></td>
+                                <td data-label="Actions">
                                     <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>Verify Docs</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                } else if (tabId === 'app-history') {
+                    const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications/history`);
+                    const { applications } = await res.json();
+                    const body = document.getElementById('app-history-table-body');
+                    body.innerHTML = '';
+                    applications.forEach(app => {
+                        body.innerHTML += `
+                            <tr>
+                                <td data-label="App ID">#APP-${app.id}</td>
+                                <td data-label="Pilot">
+                                    <div class="pilot-info-block">
+                                        <div class="p-name">${app.name}</div>
+                                        <div class="p-email"><a href="mailto:${app.email}">${app.email}</a></div>
+                                        <div class="p-phone"><a href="tel:${app.phone}">${app.phone}</a></div>
+                                    </div>
+                                </td>
+                                <td data-label="Vehicle">
+                                    ${app.car_model}<br>
+                                    <strong style="color:var(--primary-red)">${app.car_number}</strong>
+                                </td>
+                                <td data-label="Date">${new Date(app.created_at).toLocaleDateString()}</td>
+                                <td data-label="Docs">
+                                    <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>View Docs</button>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                } else if (tabId === 'tariffs') {
+                    const res = await fetch(`${API_BASE_URL}/api/tariffs`);
+                    const tariffs = await res.json();
+                    const body = document.getElementById('tariffs-table-body');
+                    body.innerHTML = '';
+                    tariffs.forEach(t => {
+                        const config = typeof t.config === 'string' ? JSON.parse(t.config) : t.config;
+                        let rateDesc = '';
+                        if (t.category === 'rental') {
+                            rateDesc = Object.keys(config).map(pkg => `<div style="font-size:0.8rem;"><strong>${pkg}:</strong> ₹${config[pkg].base}</div>`).join('');
+                        } else {
+                            rateDesc = `
+                                <div style="font-weight:700; color:var(--primary-red)">Base: ₹${config.base || 0}</div>
+                                <div style="font-size:0.8rem; color:#888">₹${config.perKm || 0}/km · Min: ${config.minKm || config.minKmPerDay || 0}km</div>
+                            `;
+                        }
+
+                        body.innerHTML += `
+                            <tr>
+                                <td data-label="Vehicle" style="text-transform:uppercase; font-weight:700; color:var(--primary-red)">${t.vehicle_type}</td>
+                                <td data-label="Category" style="text-transform:capitalize">${t.category.replace('_', ' ')}</td>
+                                <td data-label="Rates" style="font-size:0.85rem; color:#666">
+                                    <div>${rateDesc}</div>
+                                </td>
+                                <td data-label="Updated">${new Date(t.updated_at).toLocaleString()}</td>
+                                <td data-label="Configure">
+                                    <button class="action-btn" onclick='openTariffModal(${JSON.stringify(t).replace(/"/g, "&quot;")})'>Configure</button>
                                 </td>
                             </tr>
                         `;
@@ -1518,7 +1740,10 @@
                     viewer.innerHTML += `
                         <div style="border: 1px solid #eee; padding: 10px; border-radius: 10px;">
                             <p style="font-size: 0.7rem; font-weight: 800; margin-bottom: 10px;">${doc.label}</p>
-                            <img src="${doc.path}" style="width: 100%; border-radius: 5px; cursor: pointer;" onclick="window.open('${doc.path}', '_blank')">
+                            <img src="${doc.path}" 
+                                 onerror="this.src='https://placehold.co/400x300?text=File+Not+Found+On+Server'; this.style.cursor='default'; this.onclick=null;" 
+                                 style="width: 100%; border-radius: 5px; cursor: pointer;" 
+                                 onclick="window.open('${doc.path}', '_blank')">
                         </div>
                     `;
                 } else {
@@ -1533,6 +1758,17 @@
 
             document.getElementById('btn-approve-app').onclick = () => appDecision(app.id, 'approved');
             document.getElementById('btn-reject-app').onclick = () => appDecision(app.id, 'rejected');
+
+            // Hide/Show approval buttons based on application status
+            const footer = document.getElementById('doc-footer');
+            if (app.status === 'approved' || app.wallet_balance !== undefined) {
+                // This is a driver record or an approved application history
+                document.getElementById('btn-approve-app').style.display = 'none';
+                document.getElementById('btn-reject-app').style.display = 'none';
+            } else {
+                document.getElementById('btn-approve-app').style.display = 'block';
+                document.getElementById('btn-reject-app').style.display = 'block';
+            }
 
             document.getElementById('doc-modal').style.display = 'flex';
         }
@@ -1670,6 +1906,131 @@
             </div>
         </div>
     </div>
+
+        });
+    </script>
+
+    <!-- Tariff Configuration Modal -->
+    <div id="tariff-modal" class="map-modal" style="display: none;">
+        <div class="map-modal-content" style="max-width: 600px; width: 95%;">
+            <div class="map-header">
+                <h3>Configure Rate Tariff</h3>
+                <button class="close-map" onclick="closeTariffModal()">×</button>
+            </div>
+            <div style="padding: 2rem;">
+                <p id="tariff-info" style="margin-bottom: 1.5rem; font-weight: 700; color: var(--primary-red);"></p>
+                <form id="tariff-form">
+                    <input type="hidden" id="edit-t-id">
+                    <input type="hidden" id="edit-t-category">
+                    <div id="tariff-fields-container" style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                        <!-- Dynamic fields based on category -->
+                    </div>
+                    <div style="margin-top: 2rem;">
+                        <button type="submit" class="btn btn-primary" style="width: 100%;">Save Configuration</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function openTariffModal(t) {
+            const config = typeof t.config === 'string' ? JSON.parse(t.config) : t.config;
+            document.getElementById('edit-t-id').value = t.id;
+            document.getElementById('edit-t-category').value = t.category;
+            document.getElementById('tariff-info').textContent = `${t.vehicle_type.toUpperCase()} - ${t.category.toUpperCase()}`;
+            
+            const container = document.getElementById('tariff-fields-container');
+            container.innerHTML = '';
+
+            if (t.category === 'rental') {
+                Object.keys(config).forEach(pkg => {
+                    const pkgData = config[pkg];
+                    container.innerHTML += `
+                        <div style="grid-column: span 2; padding: 10px; background: #f8f8f8; border-radius: 8px; font-weight: 700; font-size: 0.8rem;">Package: ${pkg}</div>
+                        <div class="input-group">
+                            <label>Base Fare (₹)</label>
+                            <input type="number" step="0.01" value="${pkgData.base}" data-pkg="${pkg}" data-key="base" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Extra KM (₹)</label>
+                            <input type="number" step="0.01" value="${pkgData.extraKm}" data-pkg="${pkg}" data-key="extraKm" required>
+                        </div>
+                        <div class="input-group">
+                            <label>Extra Hour (₹)</label>
+                            <input type="number" step="0.01" value="${pkgData.extraHour}" data-pkg="${pkg}" data-key="extraHour" required>
+                        </div>
+                        <div style="height: 10px; grid-column: span 2;"></div>
+                    `;
+                });
+            } else {
+                container.innerHTML = `
+                    <div class="input-group">
+                        <label>Base Fare (₹)</label>
+                        <input type="number" step="0.01" id="edit-t-base" value="${config.base || 0}" required>
+                    </div>
+                    <div class="input-group">
+                        <label>Rate Per KM (₹)</label>
+                        <input type="number" step="0.01" id="edit-t-perKm" value="${config.perKm || 0}" required>
+                    </div>
+                    <div class="input-group">
+                        <label>${t.category === 'round' ? 'Min KM Per Day' : 'Min KM Distance'}</label>
+                        <input type="number" id="edit-t-min" value="${config.minKm || config.minKmPerDay || 0}" required>
+                    </div>
+                `;
+                if (t.category === 'oneway' && t.vehicle_type !== 'bike') {
+                    // One-way convenience/allowance logic is hardcoded in app.js but we could add it here
+                }
+            }
+
+            document.getElementById('tariff-modal').style.display = 'flex';
+        }
+
+        function closeTariffModal() {
+            document.getElementById('tariff-modal').style.display = 'none';
+        }
+
+        document.getElementById('tariff-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const id = document.getElementById('edit-t-id').value;
+            const category = document.getElementById('edit-t-category').value;
+            let config = {};
+
+            if (category === 'rental') {
+                const inputs = document.querySelectorAll('#tariff-fields-container input');
+                inputs.forEach(input => {
+                    const pkg = input.dataset.pkg;
+                    const key = input.dataset.key;
+                    if (!config[pkg]) config[pkg] = {};
+                    config[pkg][key] = parseFloat(input.value);
+                });
+            } else {
+                config = {
+                    base: parseFloat(document.getElementById('edit-t-base').value),
+                    perKm: parseFloat(document.getElementById('edit-t-perKm').value)
+                };
+                const minVal = parseInt(document.getElementById('edit-t-min').value);
+                if (category === 'round') config.minKmPerDay = minVal;
+                else config.minKm = minVal;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/admin/update-tariff`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id, config })
+                });
+                if (res.ok) {
+                    alert('Tariff updated successfully!');
+                    closeTariffModal();
+                    loadTabData('tariffs');
+                } else {
+                    const err = await res.json();
+                    alert(err.error);
+                }
+            } catch (err) { alert('Update failed'); }
+        });
+    </script>
 
     <script src="alert.js"></script>
     <script>

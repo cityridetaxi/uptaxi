@@ -174,6 +174,18 @@ async function initDB() {
                 wallet_balance DECIMAL(10,2) DEFAULT 0,
                 is_blocked TINYINT DEFAULT 0,
                 approval_status VARCHAR(20) DEFAULT 'approved',
+                
+                -- Driver Documents (Stored upon approval)
+                dl_front VARCHAR(255),
+                dl_back VARCHAR(255),
+                pvc VARCHAR(255),
+                aadhar_front VARCHAR(255),
+                aadhar_back VARCHAR(255),
+                rc_book VARCHAR(255),
+                insurance VARCHAR(255),
+                pollution VARCHAR(255),
+                permit VARCHAR(255),
+
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         `);
@@ -181,6 +193,12 @@ async function initDB() {
         // Migration: Ensure columns exist
         try { await db.query('ALTER TABLE drivers ADD COLUMN is_blocked TINYINT DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE drivers ADD COLUMN approval_status VARCHAR(20) DEFAULT "approved"'); } catch (e) {}
+        
+        // Add Document Columns to Drivers if missing
+        const docCols = ['dl_front', 'dl_back', 'pvc', 'aadhar_front', 'aadhar_back', 'rc_book', 'insurance', 'pollution', 'permit'];
+        for (const col of docCols) {
+            try { await db.query(`ALTER TABLE drivers ADD COLUMN ${col} VARCHAR(255)`); } catch (e) {}
+        }
 
         // Driver Applications (New Registrations)
         await db.query(`
@@ -322,15 +340,92 @@ async function initDB() {
             )
         `);
 
-        // Default Admin
-        const adminPass = 'adminpass';
-        const salt = await bcrypt.genSalt(10);
-        const hashedAdminPass = await bcrypt.hash(adminPass, salt);
+        // Tariffs
         await db.query(`
-            INSERT INTO admins (id, name, email, password) 
-            VALUES (1, 'System Admin', 'admin@cityridetaxi', ?)
-            ON DUPLICATE KEY UPDATE email='admin@cityridetaxi', password=?
-        `, [hashedAdminPass, hashedAdminPass]);
+            CREATE TABLE IF NOT EXISTS tariffs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                vehicle_type VARCHAR(50),
+                category VARCHAR(50),
+                config JSON,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Insert default tariffs if empty
+        try {
+            const [tariffRows] = await db.query('SELECT COUNT(*) as cnt FROM tariffs');
+            if (tariffRows[0].cnt === 0) {
+                const defaultTariffs = [
+                    {
+                        vehicle_type: 'bike',
+                        category: 'local',
+                        config: JSON.stringify({ base: 0, perKm: 10, minKm: 5 })
+                    },
+                    {
+                        vehicle_type: 'bike',
+                        category: 'oneway',
+                        config: JSON.stringify({ base: 0, perKm: 10, minKm: 5, convenience: 0 })
+                    },
+                    {
+                        vehicle_type: 'sedan',
+                        category: 'local',
+                        config: JSON.stringify({ base: 200, perKm: 25, minKm: 0 })
+                    },
+                    {
+                        vehicle_type: 'sedan',
+                        category: 'oneway',
+                        config: JSON.stringify({ base: 0, perKm: 13, minKm: 130 })
+                    },
+                    {
+                        vehicle_type: 'sedan',
+                        category: 'round',
+                        config: JSON.stringify({ base: 0, perKm: 12, minKmPerDay: 250 })
+                    },
+                    {
+                        vehicle_type: 'sedan',
+                        category: 'rental',
+                        config: JSON.stringify({ 
+                            '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
+                            '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
+                            '8-80': { base: 2100, extraKm: 16, extraHour: 120 }, 
+                            '12-120': { base: 2800, extraKm: 15, extraHour: 120 } 
+                        })
+                    },
+                    {
+                        vehicle_type: 'suv',
+                        category: 'local',
+                        config: JSON.stringify({ base: 300, perKm: 35, minKm: 0 })
+                    },
+                    {
+                        vehicle_type: 'suv',
+                        category: 'oneway',
+                        config: JSON.stringify({ base: 0, perKm: 19, minKm: 130 })
+                    },
+                    {
+                        vehicle_type: 'suv',
+                        category: 'round',
+                        config: JSON.stringify({ base: 0, perKm: 18, minKmPerDay: 250 })
+                    },
+                    {
+                        vehicle_type: 'suv',
+                        category: 'rental',
+                        config: JSON.stringify({ 
+                            '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
+                            '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
+                            '8-80': { base: 3100, extraKm: 22, extraHour: 200 }, 
+                            '12-120': { base: 4200, extraKm: 20, extraHour: 200 } 
+                        })
+                    }
+                ];
+
+                for (const t of defaultTariffs) {
+                    await db.query('INSERT INTO tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
+                }
+                console.log('Default tariffs initialized.');
+            }
+        } catch (e) {
+            console.error('Tariff initialization failed:', e.message);
+        }
 
         console.log('MySQL schema and default admin ensured.');
     } catch (err) {
@@ -761,10 +856,33 @@ app.post('/api/driver/register', upload.fields([
 // --- ADMIN: MANAGE DRIVER APPLICATIONS ---
 app.get('/api/admin/driver-applications', async (req, res) => {
     try {
-        const [apps] = await db.query('SELECT * FROM driver_applications ORDER BY created_at DESC');
+        const { status } = req.query;
+        let sql = 'SELECT * FROM driver_applications';
+        let params = [];
+        
+        if (status) {
+            sql += ' WHERE status = ?';
+            params.push(status);
+        } else {
+            // Default to pending for the main queue
+            sql += ' WHERE status = "pending"';
+        }
+        
+        sql += ' ORDER BY created_at DESC';
+        
+        const [apps] = await db.query(sql, params);
         res.json({ success: true, applications: apps });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch applications.' });
+    }
+});
+
+app.get('/api/admin/driver-applications/history', async (req, res) => {
+    try {
+        const [apps] = await db.query('SELECT * FROM driver_applications WHERE status = "approved" ORDER BY created_at DESC');
+        res.json({ success: true, applications: apps });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch application history.' });
     }
 });
 
@@ -777,24 +895,33 @@ app.post('/api/admin/driver-applications/decision', async (req, res) => {
         const app = apps[0];
 
         if (status === 'approved') {
-            // Move to drivers table
+            // Move to drivers table with all documents
             const sql = `
-                INSERT INTO drivers (name, email, password, phone, car_model, car_number, vehicle_type, approval_status)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'approved')
+                INSERT INTO drivers (
+                    name, email, password, phone, car_model, car_number, vehicle_type, approval_status,
+                    dl_front, dl_back, pvc, aadhar_front, aadhar_back, rc_book, insurance, pollution, permit
+                )
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `;
-            await db.query(sql, [app.name, app.email, app.password, app.phone, app.car_model, app.car_number, app.vehicle_type]);
+            const values = [
+                app.name, app.email, app.password, app.phone, app.car_model, app.car_number, app.vehicle_type,
+                app.dl_front, app.dl_back, app.pvc, app.aadhar_front, app.aadhar_back, 
+                app.rc_book, app.insurance, app.pollution, app.permit
+            ];
+            await db.query(sql, values);
             
-            // Delete application
-            await db.query('DELETE FROM driver_applications WHERE id = ?', [appId]);
+            // Mark application as approved (History Storage)
+            await db.query('UPDATE driver_applications SET status = "approved", admin_note = ? WHERE id = ?', [note || 'Approved by Command', appId]);
 
             // Optional: Send Email Notification
             await sendBrevoMail(app.email, 'CityRide Pilot Identity Verified', `<h2>Welcome to the fleet, Pilot!</h2><p>Your application has been authorized by Command. You can now log in to the Driver Portal and begin your missions.</p>`).catch(e => console.error('Approval notification failed', e));
 
         } else {
-            // Update status to rejected
-            await db.query('UPDATE driver_applications SET status = "rejected", admin_note = ? WHERE id = ?', [note, appId]);
+            // REJECTED: Delete application data as requested
+            await db.query('DELETE FROM driver_applications WHERE id = ?', [appId]);
             
-            // Optional: Send Email Notification
+            // Optional: Send Email Notification before deletion? 
+            // Better to send first then delete, but we already have 'app' data in memory.
             await sendBrevoMail(app.email, 'Pilot Application Update', `<h2>Ground Control Update</h2><p>Your application was not authorized at this time.</p><p><strong>Reason:</strong> ${note}</p>`).catch(e => console.error('Rejection notification failed', e));
         }
 
@@ -1478,6 +1605,28 @@ app.post('/api/bookings/update-status', async (req, res) => {
 // --- CONFIGURATION & UTILITIES ---
 app.get('/api/config/maps-key', (req, res) => {
     res.json({ mapboxToken: process.env.MAPBOX_ACCESS_TOKEN || '' });
+});
+
+// --- RATE TARIFF CONTROLLER ---
+app.get('/api/tariffs', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM tariffs');
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch tariffs' });
+    }
+});
+
+app.post('/api/admin/update-tariff', async (req, res) => {
+    try {
+        const { id, config } = req.body;
+        if (!id || !config) return res.status(400).json({ error: 'ID and config are required.' });
+        
+        await db.query('UPDATE tariffs SET config = ? WHERE id = ?', [JSON.stringify(config), id]);
+        res.json({ success: true, message: 'Tariff updated successfully.' });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update tariff.' });
+    }
 });
 
 // --- TESTING UTILITIES ---

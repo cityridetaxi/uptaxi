@@ -134,6 +134,60 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Dynamic Tariff Storage ---
+    let pricing = null;
+
+    async function fetchTariffs() {
+        try {
+            const res = await fetch(`${API_BASE_URL}/api/tariffs`);
+            const data = await res.json();
+            
+            // Transform array into nested object structure expected by renderVehicleOptions
+            const transformed = {};
+            data.forEach(t => {
+                if (!transformed[t.vehicle_type]) {
+                    // Initialize with display properties (these could also be moved to DB eventually)
+                    const displayInfo = {
+                        bike: { name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1 },
+                        sedan: { name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4 },
+                        suv: { name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6 }
+                    };
+                    transformed[t.vehicle_type] = { ...displayInfo[t.vehicle_type] };
+                }
+                transformed[t.vehicle_type][t.category] = typeof t.config === 'string' ? JSON.parse(t.config) : t.config;
+            });
+            pricing = transformed;
+            console.log('✅ Tariffs synchronized with Mainframe.');
+        } catch (err) {
+            console.error('Tariff fetch failed, using emergency fallback.', err);
+            // Fallback to hardcoded values if API fails
+            pricing = {
+                bike: {
+                    name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1,
+                    local: { base: 0, perKm: 10, minKm: 5 },
+                    oneway: { base: 0, perKm: 10, minKm: 5, convenience: 0 }
+                },
+                sedan: {
+                    name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4,
+                    local: { base: 200, perKm: 25, minKm: 0 },
+                    oneway: { base: 0, perKm: 13, minKm: 130 },
+                    round: { base: 0, perKm: 12, minKmPerDay: 250 },
+                    rental: { '2-20': { base: 600, extraKm: 18, extraHour: 150 }, '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, '8-80': { base: 2100, extraKm: 16, extraHour: 120 }, '12-120': { base: 2800, extraKm: 15, extraHour: 120 } }
+                },
+                suv: {
+                    name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6,
+                    local: { base: 300, perKm: 35, minKm: 0 },
+                    oneway: { base: 0, perKm: 19, minKm: 130 },
+                    round: { base: 0, perKm: 18, minKmPerDay: 250 },
+                    rental: { '2-20': { base: 900, extraKm: 25, extraHour: 250 }, '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, '8-80': { base: 3100, extraKm: 22, extraHour: 200 }, '12-120': { base: 4200, extraKm: 20, extraHour: 200 } }
+                }
+            };
+        }
+    }
+
+    // Initial Fetch
+    fetchTariffs();
+
     // 4. Fare Calculation Logic - ZERO KEY SOLUTION (OSRM)
     async function calculateFare() {
         // Check if user is logged in
@@ -192,42 +246,10 @@ document.addEventListener('DOMContentLoaded', () => {
             tripDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)) + 1;
         }
 
-        // Selected Package for Rental
-        const packageVal = rentalPackageSelect ? rentalPackageSelect.value : '2-20';
-        const [pMaxHrs, pMaxKm] = packageVal.split('-').map(Number);
-
-        const pricing = {
-            bike: {
-                name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1,
-                local: { base: 0, perKm: 10, minKm: 5 },
-                oneway: { base: 0, perKm: 10, minKm: 5, convenience: 0 },
-                round: null, rental: null
-            },
-            sedan: {
-                name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4,
-                local: { base: 200, perKm: 25, minKm: 0 },
-                oneway: { base: 0, perKm: 13, minKm: 130 },
-                round: { base: 0, perKm: 12, minKmPerDay: 250 },
-                rental: { 
-                    '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
-                    '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
-                    '8-80': { base: 2100, extraKm: 16, extraHour: 120 }, 
-                    '12-120': { base: 2800, extraKm: 15, extraHour: 120 } 
-                }
-            },
-            suv: {
-                name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6,
-                local: { base: 300, perKm: 35, minKm: 0 },
-                oneway: { base: 0, perKm: 19, minKm: 130 },
-                round: { base: 0, perKm: 18, minKmPerDay: 250 },
-                rental: { 
-                    '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
-                    '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
-                    '8-80': { base: 3100, extraKm: 22, extraHour: 200 }, 
-                    '12-120': { base: 4200, extraKm: 20, extraHour: 200 } 
-                }
-            }
-        };
+        if (!pricing) {
+            container.innerHTML = '<div style="padding: 20px; text-align: center; color: #888;">Synchronizing Tariffs...</div>';
+            return;
+        }
 
         const allTripTypes = [
             { id: 'local', label: 'Local City Ride', category: 'local' },
