@@ -635,9 +635,9 @@ app.post('/api/auth/register', async (req, res) => {
     try {
         const { name, email, password, phone, otp } = req.body;
         
-        // 1. Validate OTP
-        const [otpRows] = await db.query('SELECT * FROM otps WHERE email = ? AND otp = ? AND expires_at > NOW()', [email, otp]);
-        if (otpRows.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP.' });
+        // 1. Validate OTP (DISABLED)
+        // const [otpRows] = await db.query('SELECT * FROM otps WHERE email = ? AND otp = ? AND expires_at > NOW()', [email, otp]);
+        // if (otpRows.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP.' });
 
         // 2. Check for Existing Member
         const [existing] = await db.query('SELECT id FROM passengers WHERE phone = ? OR email = ?', [phone, email]);
@@ -649,8 +649,8 @@ app.post('/api/auth/register', async (req, res) => {
         const sql = 'INSERT INTO passengers (name, email, password, phone) VALUES (?, ?, ?, ?)';
         const [result] = await db.query(sql, [name, email, hashedPassword, phone]);
         
-        // Cleanup OTP
-        await db.query('DELETE FROM otps WHERE email = ?', [email]);
+        // Cleanup OTP (DISABLED)
+        // await db.query('DELETE FROM otps WHERE email = ?', [email]);
         
         res.json({ success: true, userId: result.insertId });
     } catch (err) {
@@ -810,11 +810,11 @@ app.post('/api/driver/register', upload.fields([
             return res.status(400).json({ error: 'Core identity details are required.' });
         }
 
-        // Verify OTP Status
-        const otpStatus = registrationOtps.get(email);
-        if (!otpStatus || !otpStatus.verified) {
-            return res.status(401).json({ error: 'Identity Verification Required. Please verify your email via OTP first.' });
-        }
+        // Verify OTP Status (DISABLED)
+        // const otpStatus = registrationOtps.get(email);
+        // if (!otpStatus || !otpStatus.verified) {
+        //     return res.status(401).json({ error: 'Identity Verification Required. Please verify your email via OTP first.' });
+        // }
 
         // Check availability
         const [existing] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
@@ -1306,10 +1306,13 @@ app.get('/api/admin/stats', async (req, res) => {
 app.get('/api/admin/bookings', async (req, res) => {
     try {
         const sql = `
-            SELECT b.*, u.name as customer_name, u.phone as customer_phone, d.name as driver_name, d.car_model, d.car_number, d.phone as driver_phone
+            SELECT b.*, u.name as customer_name, u.phone as customer_phone, 
+                   d.name as driver_name, d.car_model, d.car_number, d.phone as driver_phone,
+                   v.business_name as vendor_business_name
             FROM bookings b
             LEFT JOIN passengers u ON b.user_id = u.id
             LEFT JOIN drivers d ON b.driver_id = d.id
+            LEFT JOIN vendors v ON b.vendor_id = v.id
             ORDER BY b.created_at DESC
         `;
         const [rows] = await db.query(sql);
@@ -1568,13 +1571,21 @@ app.post('/api/bookings/update-status', async (req, res) => {
         
         // If completing, verify OTP
         if (status === 'completed') {
-            const [rows] = await db.query('SELECT journey_otp, trip_type, start_odometer, journey_start_time, vehicle_type FROM bookings WHERE id = ?', [bookingId]);
+            const [rows] = await db.query('SELECT journey_otp, status, trip_type, start_odometer, journey_start_time, vehicle_type, vendor_id, vendor_markup, driver_id, fare FROM bookings WHERE id = ?', [bookingId]);
             if (rows.length === 0) return res.status(404).json({ error: 'Booking missing.' });
             
             const booking = rows[0];
 
             if (booking.journey_otp !== otp) {
                 return res.status(400).json({ error: 'SECURITY ALERT: Verification Token Mismatch. Please check the 4-digit code in passenger details.' });
+            }
+
+            // --- VENDOR PROFIT DEDUCTION ---
+            let vendorProfitDeducted = 0;
+            if (booking.status !== 'completed' && booking.vendor_id && parseFloat(booking.vendor_markup) > 0) {
+                vendorProfitDeducted = parseFloat(booking.vendor_markup);
+                await db.query('UPDATE drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [vendorProfitDeducted, booking.driver_id]);
+                console.log(`[FINANCE] Deducted ₹${vendorProfitDeducted} vendor profit from Driver #${booking.driver_id} for Ride #B${bookingId}`);
             }
 
             // Handle Rental Calculations
@@ -1586,13 +1597,19 @@ app.post('/api/bookings/update-status', async (req, res) => {
 
                 // Update booking with end details
                 await db.query('UPDATE bookings SET end_odometer = ?, journey_end_time = NOW() WHERE id = ?', [endOdometer, bookingId]);
-                
-                // Logic for final fare calculation could go here if we want to overwrite the estimated fare
-                // For now, we store them for audit.
             } else {
                 // Non-rental rides also record end time
                 await db.query('UPDATE bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
             }
+
+            await db.query('UPDATE bookings SET status = ? WHERE id = ?', [status, bookingId]);
+            
+            return res.json({ 
+                success: true, 
+                vendorProfit: vendorProfitDeducted,
+                totalFare: booking.fare,
+                baseFare: (parseFloat(booking.fare.replace(/[^0-9.]/g,'')) || 0) - vendorProfitDeducted
+            });
         }
         
         await db.query('UPDATE bookings SET status = ? WHERE id = ?', [status, bookingId]);

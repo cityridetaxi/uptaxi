@@ -685,10 +685,8 @@
         <div class="sidebar-nav">
             <div class="nav-item active" onclick="switchTab('overview', this)">📊 Execution Overview</div>
             <div class="nav-item" onclick="switchTab('bookings', this)">🚕 Mission Control</div>
-            <div class="nav-item" onclick="switchTab('cancellations', this)">🛑 Abort Requests</div>
-            <div class="nav-item" onclick="switchTab('drivers', this)">🏎️ Manage Drivers</div>
-            <div class="nav-item" onclick="switchTab('applications', this)">📋 Pilot Applications</div>
-            <div class="nav-item" onclick="switchTab('app-history', this)">📜 Application History</div>
+            <div class="nav-item" onclick="switchTab('fleet', this)">🏎️ Pilot Management</div>
+            <div class="nav-item" onclick="switchTab('wallets', this)">💳 Wallet Registry</div>
             <div class="nav-item" onclick="switchTab('users', this)">👥 Member Registry</div>
             <div class="nav-item" onclick="switchTab('vendors', this)">🤝 Network Partners</div>
             <div class="nav-item" onclick="switchTab('tariffs', this)">💰 Rate Tariffs</div>
@@ -744,22 +742,47 @@
             </div>
         </div>
 
-        <!-- Bookings Tab -->
+        <!-- Mission Control Tab (Combined Bookings & Aborts) -->
         <div id="bookings" class="tab-section">
             <div class="stage-header">
-                <h1>Mission <span class="text-accent">Logs</span></h1>
+                <h1>Mission <span class="text-accent">Control</span></h1>
                 <div style="display: flex; gap: 1rem;">
                     <button class="btn btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.8rem; background: #2e7d32;" onclick="downloadCSV()">CSV Report</button>
                     <button class="btn btn-primary" style="padding: 0.6rem 1.2rem; font-size: 0.8rem; background: #c62828;" onclick="downloadPDF()">PDF Report</button>
                 </div>
             </div>
+
+            <!-- Abort Requests Section (Conditional) -->
+            <div id="abort-requests-section" style="display: none; margin-bottom: 4rem;">
+                <h3 style="margin-bottom: 2rem; color: #d32f2f; display: flex; align-items: center; gap: 10px;">
+                    🛑 Pending Abort Requests
+                </h3>
+                <div class="data-table-container" style="border: 2px solid #ffebee;">
+                    <table class="cityride-table">
+                        <thead>
+                            <tr>
+                                <th>Mission ID</th>
+                                <th>Pilot / Member</th>
+                                <th>Reason for Abort</th>
+                                <th>Authorization</th>
+                            </tr>
+                        </thead>
+                        <tbody id="cancellations-table-body">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <div class="data-table-container">
+                <h3 style="margin-bottom: 2rem;">Mission Logs</h3>
                 <table class="cityride-table">
                     <thead>
                         <tr>
                             <th>ID</th>
                             <th>Customer</th>
                             <th>Trip Data</th>
+                            <th>Financials</th>
                             <th>Crew Assigned</th>
                             <th>Status</th>
                             <th>Operation</th>
@@ -773,150 +796,142 @@
             </div>
         </div>
 
-        <!-- Abort Requests Tab -->
-        <div id="cancellations" class="tab-section">
+        <!-- Pilot Management Tab (Combined Drivers & Applications) -->
+        <div id="fleet" class="tab-section">
             <div class="stage-header">
-                <h1>Abort <span class="text-accent">Requests</span></h1>
-                <p>Manage mission cancellation requests from pilot partners.</p>
+                <h1>Pilot <span class="text-accent">Management</span></h1>
+                <p>Unified control for fleet onboarding and driver registry.</p>
             </div>
-            <div class="data-table-container">
-                <table class="cityride-table">
-                    <thead>
-                        <tr>
-                            <th>Mission ID</th>
-                            <th>Pilot / Member</th>
-                            <th>Reason for Abort</th>
-                            <th>Authorization</th>
-                        </tr>
-                    </thead>
-                    <tbody id="cancellations-table-body">
-                        <!-- Loaded via JS -->
-                    </tbody>
-                </table>
+
+            <!-- Tab Sub-Navigation -->
+            <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+                <button class="btn" style="background: var(--admin-sidebar); color: white; padding: 0.6rem 1.2rem;" onclick="showFleetSubSection('active-pilots')">🏎️ Active Pilots</button>
+                <button class="btn" style="background: #eee; color: #333; padding: 0.6rem 1.2rem;" onclick="showFleetSubSection('pending-apps')">📋 Pending Applications</button>
+                <button class="btn" style="background: #eee; color: #333; padding: 0.6rem 1.2rem;" onclick="showFleetSubSection('onboarding-history')">📜 History</button>
+            </div>
+
+            <!-- Active Pilots Section -->
+            <div id="active-pilots-section" class="fleet-subsection">
+                <!-- Create Driver Form -->
+                <div class="data-table-container" style="margin-bottom: 3rem; background: var(--admin-sidebar); color: white;">
+                    <h3 style="margin-bottom: 2rem;">Induct Partner Pilot</h3>
+                    <form id="create-driver-form" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Full Name</label>
+                            <input type="text" id="d-name" placeholder="Pilot Name" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Email</label>
+                            <input type="email" id="d-email" placeholder="pilot@cityridetaxi.com" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Access Key (Password)</label>
+                            <input type="text" id="d-pass" placeholder="Pilot123!" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Phone</label>
+                            <input type="text" id="d-phone" placeholder="Pilot Signal" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Vehicle Model</label>
+                            <input type="text" id="d-car" placeholder="Black Sedan" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Vehicle ID</label>
+                            <input type="text" id="d-num" placeholder="TN 01 CRT" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
+                        </div>
+                        <div class="input-group">
+                            <label style="color: rgba(255,255,255,0.7);">Vehicle Type</label>
+                            <select id="d-type" required style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white; width: 100%; padding: 10px; border-radius: 8px;">
+                                <option value="sedan" style="color: black;">Sedan</option>
+                                <option value="suv" style="color: black;">SUV</option>
+                                <option value="bike" style="color: black;">Bike</option>
+                            </select>
+                        </div>
+                        <div style="grid-column: span 3;">
+                            <button type="submit" class="btn btn-primary" style="width: 100%;">Authorize Partner Pilot</button>
+                        </div>
+                    </form>
+                </div>
+
+                <div class="data-table-container">
+                    <table class="cityride-table">
+                        <thead>
+                            <tr>
+                                <th>Pilot ID</th>
+                                <th>Details</th>
+                                <th>Vehicle ID</th>
+                                <th>Category</th>
+                                <th>Model</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="fleet-table-body">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Pending Applications Section -->
+            <div id="pending-apps-section" class="fleet-subsection" style="display: none;">
+                <div class="data-table-container">
+                    <table class="cityride-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Identity</th>
+                                <th>Vehicle</th>
+                                <th>Docs Status</th>
+                                <th>Status</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="applications-table-body">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- History Section -->
+            <div id="onboarding-history-section" class="fleet-subsection" style="display: none;">
+                <div class="data-table-container">
+                    <table class="cityride-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Pilot</th>
+                                <th>Vehicle</th>
+                                <th>Authorized On</th>
+                                <th>Docs</th>
+                            </tr>
+                        </thead>
+                        <tbody id="app-history-table-body">
+                            <!-- Loaded via JS -->
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
-        <!-- Drivers Tab -->
-        <div id="drivers" class="tab-section">
+        <!-- Wallet Registry Tab -->
+        <div id="wallets" class="tab-section">
             <div class="stage-header">
-                <h1>Manage <span class="text-accent">Drivers</span></h1>
-                <p>Manage and audit professional driver partners.</p>
+                <h1>Wallet <span class="text-accent">Registry</span></h1>
+                <p>Quick balance management for all authorized platform pilots.</p>
             </div>
-            <!-- Create Driver Section -->
-            <div class="data-table-container"
-                style="margin-bottom: 3rem; background: var(--admin-sidebar); color: white;">
-                <h3 style="margin-bottom: 2rem;">Induct Partner Pilot</h3>
-                <form id="create-driver-form"
-                    style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem;">
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Full Name</label>
-                        <input type="text" id="d-name" placeholder="Pilot Name" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Email</label>
-                        <input type="email" id="d-email" placeholder="pilot@cityridetaxi.com" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Access Key (Password)</label>
-                        <input type="text" id="d-pass" placeholder="Pilot123!" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Phone</label>
-                        <input type="text" id="d-phone" placeholder="Pilot Signal" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Vehicle Model</label>
-                        <input type="text" id="d-car" placeholder="Black Sedan" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Vehicle ID (Number Plate)</label>
-                        <input type="text" id="d-num" placeholder="TN 01 CRT" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white;">
-                    </div>
-                    <div class="input-group">
-                        <label style="color: rgba(255,255,255,0.7);">Vehicle Type</label>
-                        <select id="d-type" required
-                            style="background: rgba(255,255,255,0.1); border-color: rgba(255,255,255,0.1); color: white; width: 100%; padding: 10px; border-radius: 8px;">
-                            <option value="sedan" style="color: black;">Sedan</option>
-                            <option value="suv" style="color: black;">SUV</option>
-                            <option value="bike" style="color: black;">Bike</option>
-                        </select>
-                    </div>
-                    <div style="grid-column: span 3;">
-                        <button type="submit" class="btn btn-primary" style="width: 100%;">Authorize Partner
-                            Pilot</button>
-                    </div>
-                </form>
-            </div>
-
             <div class="data-table-container">
                 <table class="cityride-table">
                     <thead>
                         <tr>
                             <th>Pilot ID</th>
-                            <th>Details</th>
-                            <th>Vehicle ID</th>
-                            <th>Category</th>
-                            <th>Model</th>
-                            <th>Wallet</th>
-                            <th>Actions</th>
+                            <th>Partner Details</th>
+                            <th>Current Balance</th>
+                            <th>Wallet Operations</th>
                         </tr>
                     </thead>
-                    <tbody id="fleet-table-body">
-                        <!-- Loaded via JS -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Pilot Applications Tab -->
-        <div id="applications" class="tab-section">
-            <div class="stage-header">
-                <h1>Pilot <span class="text-accent">Applications</span></h1>
-                <p>Verify documents and authorize new platform partners.</p>
-            </div>
-            <div class="data-table-container">
-                <table class="cityride-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Identity</th>
-                            <th>Vehicle</th>
-                            <th>Docs Status</th>
-                            <th>Status</th>
-                            <th>Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody id="applications-table-body">
-                        <!-- Loaded via JS -->
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <!-- Pilot Application History Tab -->
-        <div id="app-history" class="tab-section">
-            <div class="stage-header">
-                <h1>Application <span class="text-accent">History</span></h1>
-                <p>Record of all authorized platform partners.</p>
-            </div>
-            <div class="data-table-container">
-                <table class="cityride-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Pilot</th>
-                            <th>Vehicle</th>
-                            <th>Authorized On</th>
-                            <th>Docs</th>
-                        </tr>
-                    </thead>
-                    <tbody id="app-history-table-body">
+                    <tbody id="wallets-table-body">
                         <!-- Loaded via JS -->
                     </tbody>
                 </table>
@@ -1181,12 +1196,10 @@
         async function loadTabData(tabId) {
             const bodyId = tabId === 'overview' ? 'overview-table-body' : 
                            tabId === 'bookings' ? 'bookings-table-body' :
-                           tabId === 'cancellations' ? 'cancellations-table-body' :
-                           tabId === 'drivers' ? 'fleet-table-body' :
+                           tabId === 'fleet' ? 'fleet-table-body' :
+                           tabId === 'wallets' ? 'wallets-table-body' :
                            tabId === 'users' ? 'users-table-body' :
                            tabId === 'vendors' ? 'vendors-table-body' :
-                           tabId === 'applications' ? 'applications-table-body' :
-                           tabId === 'app-history' ? 'app-history-table-body' :
                            tabId === 'tariffs' ? 'tariffs-table-body' : null;
             
             const body = bodyId ? document.getElementById(bodyId) : null;
@@ -1215,7 +1228,8 @@
                             <tr>
                                 <td data-label="Booking ID">#B${b.id}</td>
                                 <td data-label="Customer">
-                                    <strong>${b.customer_name}</strong><br>
+                                    <strong>${b.customer_name}</strong>
+                                    ${b.vendor_id ? `<span style="font-size:0.6rem; color:#1565c0; font-weight:800; margin-left:5px;">(VENDOR)</span>` : ''}<br>
                                     <a href="tel:${b.customer_phone}" style="font-size:0.8rem; color:var(--primary-red); text-decoration:none; font-weight:700;">${b.customer_phone || ''}</a>
                                 </td>
                                 <td data-label="Route" style="padding: 1.5rem; text-align: left;">
@@ -1232,8 +1246,53 @@
                     const bookings = await res.json();
                     if (!body) return;
                     body.innerHTML = '';
+                    
+                    // Handle Abort Requests Section Visibility
+                    const aborts = bookings.filter(b => b.status === 'cancel_requested');
+                    const abortSection = document.getElementById('abort-requests-section');
+                    const abortBody = document.getElementById('cancellations-table-body');
+                    
+                    if (aborts.length > 0) {
+                        abortSection.style.display = 'block';
+                        abortBody.innerHTML = '';
+                        aborts.forEach(b => {
+                            abortBody.innerHTML += `
+                                <tr>
+                                    <td data-label="ID">#B${b.id}</td>
+                                    <td data-label="Pilot">
+                                        <strong>${b.driver_name || 'Pilot'}</strong><br>
+                                        <span style="font-size:0.8rem; color:#888">${b.customer_name} (#B${b.id})</span>
+                                    </td>
+                                    <td data-label="Reason" style="color:#d32f2f; font-weight:700;">${b.cancel_reason || 'No Reason Provided'}</td>
+                                    <td data-label="Actions">
+                                        <button class="action-btn" style="color:#28a745" onclick="approveCancel(${b.id})">Approve Abort</button>
+                                        <button class="action-btn" style="color:#dc3545; margin-left:10px" onclick="rejectCancel(${b.id})">Reject</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        abortSection.style.display = 'none';
+                    }
+
                     bookings.forEach(b => {
                         const isAssigned = b.status === 'assigned';
+                        const fareNum = parseFloat(b.fare.replace('₹', '')) || 0;
+                        const markupNum = parseFloat(b.vendor_markup || 0);
+                        const baseFare = fareNum - markupNum;
+                        
+                        let financialInfo = `<strong>₹${fareNum.toFixed(2)}</strong>`;
+                        if (b.vendor_id) {
+                            financialInfo = `
+                                <div style="font-size:0.85rem;">
+                                    <span style="color:#2e7d32; font-weight:700;">Profit: ₹${markupNum.toFixed(2)}</span><br>
+                                    <span style="color:#666;">Base: ₹${baseFare.toFixed(2)}</span><br>
+                                    <strong style="color:var(--primary-red)">Total: ₹${fareNum.toFixed(2)}</strong>
+                                    <div style="font-size:0.65rem; color:#1565c0; font-weight:800; margin-top:4px;">VENDOR: ${b.vendor_business_name || 'PARTNER'}</div>
+                                </div>
+                            `;
+                        }
+
                         body.innerHTML += `
                             <tr>
                                 <td data-label="Booking ID">#B${b.id}</td>
@@ -1246,6 +1305,7 @@
                                     <strong>${b.pickup_loc}</strong><br>
                                     <span style="font-size:0.8rem; color:#888">${b.drop_loc}</span>
                                 </td>
+                                <td data-label="Financials">${financialInfo}</td>
                                 <td data-label="Driver">${b.driver_name || '<span style="color:#aaa">Unassigned</span>'}</td>
                                 <td data-label="Status"><span class="status-tag status-${b.status}">${b.status}</span></td>
                                 <td data-label="Abort">${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Cancel Mission</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
@@ -1253,7 +1313,104 @@
                             </tr>
                         `;
                     });
-                } else if (tabId === 'drivers') {
+                } else if (tabId === 'fleet') {
+                    // Load Active Pilots
+                    const resD = await fetch(`${API_BASE_URL}/api/admin/drivers`);
+                    const drivers = await resD.json();
+                    const fleetBody = document.getElementById('fleet-table-body');
+                    if (fleetBody) {
+                        fleetBody.innerHTML = '';
+                        drivers.forEach(d => {
+                            fleetBody.innerHTML += `
+                                <tr>
+                                    <td data-label="Pilot ID">#P${d.id}</td>
+                                    <td data-label="Details">
+                                        <div class="pilot-info-block">
+                                            <div class="p-name">${d.name}</div>
+                                            <div class="p-email"><a href="mailto:${d.email}">${d.email}</a></div>
+                                            <div class="p-phone"><a href="tel:${d.phone}">${d.phone || 'N/A'}</a></div>
+                                        </div>
+                                    </td>
+                                    <td data-label="Vehicle ID">${d.car_number || '---'}</td>
+                                    <td data-label="Category"><span style="text-transform:uppercase; font-size:0.8rem; font-weight:700">${d.vehicle_type || 'sedan'}</span></td>
+                                    <td data-label="Model">${d.car_model || '---'}</td>
+                                    <td data-label="Actions">
+                                        <button class="action-btn" onclick='openEditModal(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Edit</button>
+                                        <button class="action-btn" style="color:#2e7d32; margin-left:10px" onclick='viewApplication(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Docs</button>
+                                        <button class="action-btn" style="color:#f39c12; margin-left:10px" onclick="openPasswordModal('driver', ${d.id}, '${d.name}')">Password</button>
+                                        <button class="action-btn" style="color:#888; margin-left:10px" onclick="deleteDriver(${d.id})">Revoke</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+
+                    // Load Applications
+                    const resA = await fetch(`${API_BASE_URL}/api/admin/driver-applications`);
+                    const { applications } = await resA.json();
+                    const appBody = document.getElementById('applications-table-body');
+                    if (appBody) {
+                        appBody.innerHTML = '';
+                        applications.forEach(app => {
+                            const hasAllDocs = app.dl_front && app.rc_book && app.aadhar_front;
+                            appBody.innerHTML += `
+                                <tr>
+                                    <td data-label="App ID">#APP-${app.id}</td>
+                                    <td data-label="Pilot">
+                                        <div class="pilot-info-block">
+                                            <div class="p-name">${app.name}</div>
+                                            <div class="p-email"><a href="mailto:${app.email}">${app.email}</a></div>
+                                            <div class="p-phone"><a href="tel:${app.phone}">${app.phone}</a></div>
+                                        </div>
+                                    </td>
+                                    <td data-label="Vehicle">
+                                        ${app.car_model}<br>
+                                        <strong style="color:var(--primary-red)">${app.car_number}</strong>
+                                    </td>
+                                    <td data-label="Documents">
+                                        <span class="status-tag ${hasAllDocs ? 'status-completed' : 'status-pending'}">
+                                            ${hasAllDocs ? 'Full Set' : 'Incomplete'}
+                                        </span>
+                                    </td>
+                                    <td data-label="Status"><span class="status-tag status-${app.status}">${app.status}</span></td>
+                                    <td data-label="Actions">
+                                        <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>Verify Docs</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+
+                    // Load Application History
+                    const resH = await fetch(`${API_BASE_URL}/api/admin/driver-applications/history`);
+                    const { applications: history } = await resH.json();
+                    const historyBody = document.getElementById('app-history-table-body');
+                    if (historyBody) {
+                        historyBody.innerHTML = '';
+                        history.forEach(app => {
+                            historyBody.innerHTML += `
+                                <tr>
+                                    <td data-label="App ID">#APP-${app.id}</td>
+                                    <td data-label="Pilot">
+                                        <div class="pilot-info-block">
+                                            <div class="p-name">${app.name}</div>
+                                            <div class="p-email"><a href="mailto:${app.email}">${app.email}</a></div>
+                                            <div class="p-phone"><a href="tel:${app.phone}">${app.phone}</a></div>
+                                        </div>
+                                    </td>
+                                    <td data-label="Vehicle">
+                                        ${app.car_model}<br>
+                                        <strong style="color:var(--primary-red)">${app.car_number}</strong>
+                                    </td>
+                                    <td data-label="Date">${new Date(app.created_at).toLocaleDateString()}</td>
+                                    <td data-label="Docs">
+                                        <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>View Docs</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+                } else if (tabId === 'wallets') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/drivers`);
                     const drivers = await res.json();
                     if (!body) return;
@@ -1262,36 +1419,28 @@
                         body.innerHTML += `
                             <tr>
                                 <td data-label="Pilot ID">#P${d.id}</td>
-                                <td data-label="Details">
+                                <td data-label="Partner Details">
                                     <div class="pilot-info-block">
                                         <div class="p-name">${d.name}</div>
-                                        <div class="p-email"><a href="mailto:${d.email}">${d.email}</a></div>
                                         <div class="p-phone"><a href="tel:${d.phone}">${d.phone || 'N/A'}</a></div>
                                     </div>
                                 </td>
-                                <td data-label="Vehicle ID">${d.car_number || '---'}</td>
-                                <td data-label="Category"><span style="text-transform:uppercase; font-size:0.8rem; font-weight:700">${d.vehicle_type || 'sedan'}</span></td>
-                                <td data-label="Model">${d.car_model || '---'}</td>
-                                <td data-label="Wallet"><strong style="color:var(--primary-red)">₹${parseFloat(d.wallet_balance || 0).toFixed(2)}</strong></td>
-                                <td data-label="Actions">
-                                    <button class="action-btn" onclick='openEditModal(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Edit</button>
-                                    <button class="action-btn" style="color:#2e7d32; margin-left:10px" onclick='viewApplication(${JSON.stringify(d).replace(/"/g, "&quot;")})'>Docs</button>
-                                    <button class="action-btn" style="color:#007BFF; margin-left:10px" onclick="openWalletModal(${d.id}, ${d.wallet_balance || 0})">Wallet</button>
-                                    <button class="action-btn" style="color:#f39c12; margin-left:10px" onclick="openPasswordModal('driver', ${d.id}, '${d.name}')">Password</button>
-                                    <button class="action-btn" style="color:#888; margin-left:10px" onclick="deleteDriver(${d.id})">Revoke</button>
+                                <td data-label="Current Balance"><strong style="color:var(--primary-red); font-size: 1.2rem;">₹${parseFloat(d.wallet_balance || 0).toFixed(2)}</strong></td>
+                                <td data-label="Wallet Operations">
+                                    <button class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.8rem;" onclick="openWalletModal(${d.id}, ${d.wallet_balance || 0})">💳 Quick Update</button>
                                 </td>
                             </tr>
                         `;
                     });
                 } else if (tabId === 'users') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/users`);
-                    const passengers = await res.json();
+                    const users = await res.json();
                     if (!body) return;
                     body.innerHTML = '';
-                    passengers.forEach(u => {
+                    users.forEach(u => {
                         body.innerHTML += `
                             <tr>
-                                <td data-label="Member ID">#U${u.id}</td>
+                                <td data-label="Member ID">#M${u.id}</td>
                                 <td data-label="Details">
                                     <div class="pilot-info-block">
                                         <div class="p-name">${u.name}</div>
@@ -1299,36 +1448,14 @@
                                         <div class="p-phone"><a href="tel:${u.phone}">${u.phone || 'N/A'}</a></div>
                                     </div>
                                 </td>
-                                <td data-label="Joined">${new Date(u.created_at).toLocaleDateString()}</td>
+                                <td data-label="Registration Date">${new Date(u.created_at).toLocaleDateString()}</td>
                                 <td data-label="Actions">
-                                    <button class="action-btn" style="color:#f39c12; margin-right:10px" onclick="openPasswordModal('passenger', ${u.id}, '${u.name}')">Reset Password</button>
-                                    <button class="action-btn" style="color:#888" onclick="deletePassenger(${u.id})">Revoke Access</button>
+                                    <button class="action-btn" onclick="openPasswordModal('user', ${u.id}, '${u.name}')">Password</button>
+                                    <button class="action-btn" style="color:#888; margin-left:10px" onclick="deletePassenger(${u.id})">Revoke</button>
                                 </td>
                             </tr>
                         `;
                     });
-                } else if (tabId === 'cancellations') {
-                    const res = await fetch(`${API_BASE_URL}/api/admin/bookings`);
-                    const bookings = await res.json();
-                    if (!body) return;
-                    body.innerHTML = '';
-                    bookings.filter(b => b.status === 'cancel_requested').forEach(b => {
-                        body.innerHTML += `
-                            <tr>
-                                <td data-label="ID">#B${b.id}</td>
-                                <td data-label="Pilot">
-                                    <strong>${b.driver_name || 'Pilot'}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${b.customer_name} (#B${b.id})</span>
-                                </td>
-                                <td data-label="Reason" style="color:#d32f2f; font-weight:700;">${b.cancel_reason || 'No Reason Provided'}</td>
-                                <td data-label="Actions">
-                                    <button class="action-btn" style="color:#28a745" onclick="approveCancel(${b.id})">Approve Abort</button>
-                                    <button class="action-btn" style="color:#dc3545; margin-left:10px" onclick="rejectCancel(${b.id})">Reject</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-
                 } else if (tabId === 'vendors') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/vendors`);
                     const vendors = await res.json();
@@ -1337,78 +1464,24 @@
                     vendors.forEach(v => {
                         body.innerHTML += `
                             <tr>
-                                <td data-label="ID">#V-${v.vendor_id}</td>
-                                <td data-label="Business">
+                                <td data-label="Partner ID">${v.vendor_id}</td>
+                                <td data-label="Business Details">
                                     <strong>${v.business_name}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">POC: ${v.name}</span>
+                                    <span style="font-size:0.85rem; color:#666">${v.name}</span>
                                 </td>
-                                <td data-label="Contact">
-                                    <a href="mailto:${v.email}" style="color:#1565c0; text-decoration:none; font-weight:600;">${v.email}</a><br>
-                                    <a href="tel:${v.phone}" style="color:var(--primary-red); text-decoration:none;"><strong>${v.phone}</strong></a>
-                                </td>
-                                <td data-label="Status"><span class="status-tag status-${v.is_blocked ? 'cancelled' : 'completed'}">${v.is_blocked ? 'Blocked' : 'Active'}</span></td>
-                                <td data-label="Actions">
-                                    <button class="action-btn" style="color:#888" onclick="deleteVendor(${v.id})">Revoke Partnership</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                } else if (tabId === 'applications') {
-                    const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications`);
-                    const { applications } = await res.json();
-                    if (!body) return;
-                    body.innerHTML = '';
-                    applications.forEach(app => {
-                        const hasAllDocs = app.dl_front && app.rc_book && app.aadhar_front;
-                        body.innerHTML += `
-                            <tr>
-                                <td data-label="App ID">#APP-${app.id}</td>
-                                <td data-label="Pilot">
-                                    <div class="pilot-info-block">
-                                        <div class="p-name">${app.name}</div>
-                                        <div class="p-email"><a href="mailto:${app.email}">${app.email}</a></div>
-                                        <div class="p-phone"><a href="tel:${app.phone}">${app.phone}</a></div>
+                                <td data-label="Contact Info">
+                                    <div style="font-size:0.85rem;">
+                                        <a href="mailto:${v.email}">${v.email}</a><br>
+                                        <a href="tel:${v.phone}" style="color:var(--primary-red); text-decoration:none;">${v.phone}</a>
                                     </div>
                                 </td>
-                                <td data-label="Vehicle">
-                                    ${app.car_model}<br>
-                                    <strong style="color:var(--primary-red)">${app.car_number}</strong>
-                                </td>
-                                <td data-label="Documents">
-                                    <span class="status-tag ${hasAllDocs ? 'status-completed' : 'status-pending'}">
-                                        ${hasAllDocs ? 'Full Set' : 'Incomplete'}
+                                <td data-label="Status">
+                                    <span class="status-tag ${v.is_blocked ? 'status-cancelled' : 'status-completed'}">
+                                        ${v.is_blocked ? 'Deactivated' : 'Active'}
                                     </span>
                                 </td>
-                                <td data-label="Status"><span class="status-tag status-${app.status}">${app.status}</span></td>
                                 <td data-label="Actions">
-                                    <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>Verify Docs</button>
-                                </td>
-                            </tr>
-                        `;
-                    });
-                } else if (tabId === 'app-history') {
-                    const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications/history`);
-                    const { applications } = await res.json();
-                    if (!body) return;
-                    body.innerHTML = '';
-                    applications.forEach(app => {
-                        body.innerHTML += `
-                            <tr>
-                                <td data-label="App ID">#APP-${app.id}</td>
-                                <td data-label="Pilot">
-                                    <div class="pilot-info-block">
-                                        <div class="p-name">${app.name}</div>
-                                        <div class="p-email"><a href="mailto:${app.email}">${app.email}</a></div>
-                                        <div class="p-phone"><a href="tel:${app.phone}">${app.phone}</a></div>
-                                    </div>
-                                </td>
-                                <td data-label="Vehicle">
-                                    ${app.car_model}<br>
-                                    <strong style="color:var(--primary-red)">${app.car_number}</strong>
-                                </td>
-                                <td data-label="Date">${new Date(app.created_at).toLocaleDateString()}</td>
-                                <td data-label="Docs">
-                                    <button class="action-btn" onclick='viewApplication(${JSON.stringify(app).replace(/"/g, "&quot;")})'>View Docs</button>
+                                    <button class="action-btn" style="color:#888" onclick="deleteVendor(${v.id})">Revoke</button>
                                 </td>
                             </tr>
                         `;
@@ -1448,6 +1521,23 @@
             } catch (err) { console.error(err); }
         }
 
+        function showFleetSubSection(sectionId) {
+            document.querySelectorAll('.fleet-subsection').forEach(s => s.style.display = 'none');
+            document.getElementById(`${sectionId}-section`).style.display = 'block';
+            
+            // Update button styles
+            const buttons = document.querySelectorAll('#fleet .btn');
+            buttons.forEach(btn => {
+                if (btn.innerText.toLowerCase().includes(sectionId.replace('-', ' '))) {
+                    btn.style.background = 'var(--admin-sidebar)';
+                    btn.style.color = 'white';
+                } else {
+                    btn.style.background = '#eee';
+                    btn.style.color = '#333';
+                }
+            });
+        }
+
         async function cancelBooking(id) {
             if (!confirm('Abort this mission?')) return;
             try {
@@ -1480,7 +1570,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id })
                 });
-                if (res.ok) loadTabData('drivers');
+                if (res.ok) loadTabData('fleet');
             } catch (err) { alert('Revocation failed'); }
         }
 
@@ -1504,7 +1594,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ bookingId })
                 });
-                if (res.ok) loadTabData('cancellations');
+                if (res.ok) loadTabData('bookings');
             } catch (err) { alert('Action failed'); }
         }
 
@@ -1519,7 +1609,7 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ bookingId, note })
                 });
-                if (res.ok) loadTabData('cancellations');
+                if (res.ok) loadTabData('bookings');
             } catch (err) { alert('Action failed'); }
         }
 
@@ -1550,7 +1640,7 @@
                 if (res.ok) {
                     alert('Partner Authorized Successfully!');
                     document.getElementById('create-driver-form').reset();
-                    loadTabData('drivers');
+                    loadTabData('fleet');
                 } else {
                     const err = await res.json();
                     alert(err.error);
@@ -1621,7 +1711,7 @@
                 if (res.ok) {
                     alert('Pilot Registry Updated Successfully.');
                     closeEditModal();
-                    loadTabData('drivers');
+                    loadTabData('fleet');
                 } else {
                     const err = await res.json();
                     alert(err.error);
@@ -1655,7 +1745,7 @@
                 if (res.ok) {
                     alert('Wallet Balance Updated Successfully.');
                     closeWalletModal();
-                    loadTabData('drivers');
+                    loadTabData(_activeTab);
                 } else {
                     const err = await res.json();
                     alert(err.error);
@@ -1843,7 +1933,7 @@
                 if (res.ok) {
                     alert(`Application ${status}!`);
                     closeDocModal();
-                    loadTabData('applications');
+                    loadTabData('fleet');
                 } else {
                     const err = await res.json();
                     alert('Decision Error: ' + err.error);

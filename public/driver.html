@@ -388,9 +388,10 @@
                     card.className = 'job-card';
                     card.innerHTML = `
                         <div style="display:flex; gap:0.5rem; flex-direction:column; margin-bottom:1rem;">
-                            <div style="display:flex; gap:0.5rem;">
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                                 <div class="badge" style="background:#e3f2fd; color:#1565c0">${job.vehicle_type}</div>
                                 <div class="badge" style="background:#f3e5f5; color:#7b1fa2">${(job.trip_type === 'round' ? 'Round Trip' : (job.trip_type === 'rental' ? 'Local Rental' : (job.trip_type || 'One Way').replace('_', ' ')))}</div>
+                                ${job.vendor_id ? `<div class="badge" style="background:#e8eaf6; color:#3f51b5; border:1px solid #3f51b5">VENDOR BOOKING</div>` : ''}
                             </div>
                         </div>
                         <div style="font-weight:700;">
@@ -611,9 +612,10 @@
                     card.className = 'job-card';
                     card.innerHTML = `
                         <div style="display:flex; gap:0.5rem; flex-direction:column; margin-bottom:1rem;">
-                            <div style="display:flex; gap:0.5rem;">
+                            <div style="display:flex; gap:0.5rem; flex-wrap:wrap;">
                                 <div class="badge" style="background:${isCompleted ? '#e8f5e9' : '#fff3e0'}; color:${isCompleted ? '#2e7d32' : '#e65100'}">${job.status}</div>
                                 <div class="badge" style="background:#f3e5f5; color:#7b1fa2">${(job.trip_type === 'round' ? 'Round Trip' : (job.trip_type === 'rental' ? 'Local Rental' : (job.trip_type || 'One Way').replace('_', ' ')))}</div>
+                                ${job.vendor_id ? `<div class="badge" style="background:#e8eaf6; color:#3f51b5; border:1px solid #3f51b5">VENDOR BOOKING</div>` : ''}
                             </div>
                         </div>
                         <div style="font-weight:700">Trip #B${job.id}</div>
@@ -711,10 +713,26 @@
                 });
 
                 if (res.ok) {
-                    alert('🎉 CONGRATULATIONS! Journey verified and completed successfully. Your earnings have been credited.');
+                    const data = await res.json();
+                    let msg = '🎉 CONGRATULATIONS! Journey verified and completed successfully.\n\n';
+                    
+                    if (data.vendorProfit > 0) {
+                        const total = parseFloat(data.totalFare.replace(/[^0-9.]/g,'')) || 0;
+                        msg += `📊 MISSION FINANCIAL SUMMARY:\n`;
+                        msg += `--------------------------------\n`;
+                        msg += `Total Collected: ₹${total.toFixed(2)}\n`;
+                        msg += `Partner Markup: -₹${data.vendorProfit.toFixed(2)} (Deducted)\n`;
+                        msg += `--------------------------------\n`;
+                        msg += `YOUR FINAL SHARE: ₹${data.baseFare.toFixed(2)}\n\n`;
+                        msg += `Note: Partner profit has been deducted from your wallet balance as per the service agreement.`;
+                    } else {
+                        msg += 'Your earnings have been credited to your neural wallet.';
+                    }
+                    
+                    alert(msg);
                     setTimeout(() => {
                         window.location.reload();
-                    }, 2000);
+                    }, 500);
                 } else {
                     const error = await res.json();
                     alert('🚨 VERIFICATION FAILURE: ' + (error.error || 'Identity Token Mismatch. Action Logged.'));

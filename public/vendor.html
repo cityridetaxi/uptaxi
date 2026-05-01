@@ -195,15 +195,6 @@
                                 </select>
                             </div>
 
-                            <div class="input-group">
-                                <label>Vehicle Preference</label>
-                                <select id="vehicle-type-select">
-                                    <option value="auto">Auto Select</option>
-                                    <option value="bike">Bike</option>
-                                    <option value="sedan" selected>Sedan</option>
-                                    <option value="suv">SUV</option>
-                                </select>
-                            </div>
                         </div>
 
                         <div class="markup-box">
@@ -613,9 +604,6 @@
                         card.onclick = () => {
                             selectedVehicle = `${vType}_${tType}`;
                             
-                            const vtSelect = document.getElementById('vehicle-type-select');
-                            if (vtSelect) vtSelect.value = vType;
-
                             document.getElementById('base-fare-display').textContent = `₹${baseFare.toFixed(2)}`;
                             document.getElementById('profit-display').textContent = `+ ₹${markup.toFixed(2)}`;
                             document.getElementById('total-fare-display').textContent = `₹${totalFare.toFixed(2)}`;
@@ -626,6 +614,15 @@
                             
                             calculateVendorFare(); // Refresh list to show selection
                         };
+
+                        // Real-time update for already selected vehicle
+                        if (isSelected) {
+                            document.getElementById('base-fare-display').textContent = `₹${baseFare.toFixed(2)}`;
+                            document.getElementById('profit-display').textContent = `+ ₹${markup.toFixed(2)}`;
+                            document.getElementById('total-fare-display').textContent = `₹${totalFare.toFixed(2)}`;
+                            document.getElementById('dist-display').textContent = currentCategory === 'rental' ? 'N/A' : `${currentDistance} KM`;
+                            document.getElementById('type-display').textContent = tType.toUpperCase();
+                        }
                     }
                     container.appendChild(card);
                 });
@@ -676,10 +673,16 @@
         setupAutocomplete('pickup', 'pickup-suggestions');
         setupAutocomplete('drop', 'drop-suggestions');
 
-        // Trigger updates on change
-        ['passengers', 'pickup-date', 'pickup-time', 'return-date', 'rental-package', 'vehicle-type-select'].forEach(id => {
+        // Trigger updates on change/input
+        ['passengers', 'pickup-date', 'pickup-time', 'return-date', 'rental-package'].forEach(id => {
             const el = document.getElementById(id);
             if(el) el.addEventListener('change', () => calculateVendorFare());
+        });
+
+        // Real-time input updates
+        ['pickup', 'drop', 'v-markup'].forEach(id => {
+            const el = document.getElementById(id);
+            if(el) el.addEventListener('input', () => calculateVendorFare());
         });
 
         // --- Map Picker ---
@@ -754,7 +757,7 @@
                 date: document.getElementById('pickup-date').value,
                 time: document.getElementById('pickup-time').value,
                 vehicle: selectedVehicle.split('_')[0], // Extract 'sedan' from 'sedan_local'
-                fare: baseFareText, // Store Base Fare here so Drivers see this
+                fare: document.getElementById('total-fare-display').textContent, // Total Fare (Base + Markup) for Drivers
                 distance: document.getElementById('dist-display').textContent,
                 tripType: document.getElementById('type-display').textContent.toLowerCase(),
                 passengers: document.getElementById('passengers').value
@@ -803,6 +806,10 @@
                         `;
                     }
 
+                    const fareNum = (parseFloat(b.fare.replace(/[^0-9.]/g,'')) || 0);
+                    const markupNum = parseFloat(b.vendor_markup || 0);
+                    const baseFare = fareNum - markupNum;
+
                     const row = `<tr>
                         <td>#B${b.id}</td>
                         <td>
@@ -818,9 +825,9 @@
                                 ${driverDetails}
                             </div>
                         </td>
-                        <td>${b.fare}</td>
-                        <td style="color:#28a745; font-weight:700;">₹${b.vendor_markup}</td>
-                        <td>₹${ (parseFloat(b.fare.replace(/[^0-9.]/g,'')) || 0) + parseFloat(b.vendor_markup) }</td>
+                        <td>₹${baseFare.toFixed(2)}</td>
+                        <td style="color:#28a745; font-weight:700;">₹${markupNum.toFixed(2)}</td>
+                        <td>₹${fareNum.toFixed(2)}</td>
                         <td style="font-weight:bold; color:var(--primary-red); letter-spacing:1px">${b.journey_otp || 'N/A'}</td>
                         <td><span class="status-pill status-${b.status}">${b.status}</span></td>
                     </tr>`;

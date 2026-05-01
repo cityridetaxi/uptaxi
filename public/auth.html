@@ -176,14 +176,8 @@
                 <div class="input-group">
                     <label>Email Address</label>
                     <div style="display: flex; gap: 0.5rem;">
-                        <input type="email" id="reg-email" placeholder="name@example.com" required style="flex: 3;">
-                        <button type="button" id="otp-btn" class="btn btn-primary" style="flex: 1; padding: 0; font-size: 0.7rem; white-space: nowrap;" onclick="sendOTP()">Verify Email</button>
+                        <input type="email" id="reg-email" placeholder="name@example.com" required style="flex: 1;">
                     </div>
-                </div>
-                <!-- OTP Field (Hidden until Verify is clicked) -->
-                <div class="input-group" id="otp-group" style="display: none;">
-                    <label>Identity Verification Code (OTP)</label>
-                    <input type="text" id="reg-otp" placeholder="Enter 6-digit code sent to email" maxlength="6">
                 </div>
                 <div class="input-group">
                     <label>Phone Number</label>
@@ -260,33 +254,6 @@
             } catch (err) { alert('Login failed'); }
         });
 
-        // --- OTP Verification Logic ---
-        async function sendOTP() {
-            const email = document.getElementById('reg-email').value;
-            if (!email) return alert('Please enter your email first.');
-            
-            const btn = document.getElementById('otp-btn');
-            btn.disabled = true;
-            btn.textContent = 'Sending...';
-
-            try {
-                const res = await fetch(`${API_BASE_URL}/api/auth/send-otp`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email })
-                });
-                const result = await res.json();
-                if (res.ok) {
-                    alert('Verification code sent to your email!');
-                    document.getElementById('otp-group').style.display = 'block';
-                    btn.textContent = 'Resend OTP';
-                } else {
-                    alert(result.error);
-                    btn.textContent = 'Retry Verify';
-                }
-            } catch (err) { alert('Failed to send OTP'); }
-            btn.disabled = false;
-        }
 
         // Handle Register
         document.getElementById('register-form').addEventListener('submit', async (e) => {
@@ -296,7 +263,6 @@
                 email: document.getElementById('reg-email').value,
                 phone: document.getElementById('reg-phone').value,
                 password: document.getElementById('reg-password').value,
-                otp: document.getElementById('reg-otp').value,
                 role: 'user'
             };
 
@@ -304,7 +270,6 @@
                 return alert('Strength Required: Password must be at least 8 characters long and include a number and a symbol (!@#$%^&*, etc).');
             }
 
-            if (!data.otp) return alert('Please verify your email first.');
             if (!document.getElementById('reg-terms').checked) return alert('Please accept the terms and conditions.');
 
             try {
