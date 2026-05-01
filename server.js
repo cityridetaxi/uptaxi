@@ -1602,6 +1602,43 @@ app.post('/api/bookings/update-status', async (req, res) => {
     }
 });
 
+// --- GEOCODING PROXY (To avoid CORS issues with Photon API) ---
+app.get('/api/proxy/geocode', async (req, res) => {
+    try {
+        const { q, limit, lang, lon, lat } = req.query;
+        const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=${limit || 5}&lang=${lang || 'en'}&lon=${lon}&lat=${lat}`;
+        const response = await axios.get(url);
+        res.json(response.data);
+    } catch (err) {
+        console.error('Geocode Proxy Error:', err.message);
+        res.status(500).json({ error: 'Geocoding service unavailable via proxy.' });
+    }
+});
+
+app.get('/api/proxy/reverse', async (req, res) => {
+    try {
+        const { lon, lat } = req.query;
+        const url = `https://photon.komoot.io/reverse?lon=${lon}&lat=${lat}`;
+        const response = await axios.get(url);
+        res.json(response.data);
+    } catch (err) {
+        console.error('Reverse Geocode Proxy Error:', err.message);
+        res.status(500).json({ error: 'Reverse geocoding service unavailable via proxy.' });
+    }
+});
+
+app.get('/api/proxy/route', async (req, res) => {
+    try {
+        const { pickup, drop } = req.query;
+        const url = `https://router.project-osrm.org/route/v1/driving/${pickup};${drop}?overview=false`;
+        const response = await axios.get(url);
+        res.json(response.data);
+    } catch (err) {
+        console.error('Route Proxy Error:', err.message);
+        res.status(500).json({ error: 'Routing service unavailable via proxy.' });
+    }
+});
+
 // --- CONFIGURATION & UTILITIES ---
 app.get('/api/config/maps-key', (req, res) => {
     res.json({ mapboxToken: process.env.MAPBOX_ACCESS_TOKEN || '' });

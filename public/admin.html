@@ -773,6 +773,29 @@
             </div>
         </div>
 
+        <!-- Abort Requests Tab -->
+        <div id="cancellations" class="tab-section">
+            <div class="stage-header">
+                <h1>Abort <span class="text-accent">Requests</span></h1>
+                <p>Manage mission cancellation requests from pilot partners.</p>
+            </div>
+            <div class="data-table-container">
+                <table class="cityride-table">
+                    <thead>
+                        <tr>
+                            <th>Mission ID</th>
+                            <th>Pilot / Member</th>
+                            <th>Reason for Abort</th>
+                            <th>Authorization</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cancellations-table-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
         <!-- Drivers Tab -->
         <div id="drivers" class="tab-section">
             <div class="stage-header">
@@ -920,8 +943,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-
         </div>
 
         <!-- Vendors Tab -->
@@ -1123,17 +1144,24 @@
         }
 
         function switchTab(tabId, el) {
+            const section = document.getElementById(tabId);
+            if (!section) {
+                console.warn('Mission Control Warning: Tab section not found ->', tabId);
+                return;
+            }
+
             document.querySelectorAll('.tab-section').forEach(s => s.classList.remove('active'));
             document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            document.getElementById(tabId).classList.add('active');
-            el.classList.add('active');
+            
+            section.classList.add('active');
+            if (el) el.classList.add('active');
 
             // Close mobile menu if open
             const sidebar = document.getElementById('admin-sidebar');
             const burger = document.getElementById('admin-burger');
             if (window.innerWidth <= 1024) {
-                sidebar.classList.remove('active');
-                burger.classList.remove('active');
+                if (sidebar) sidebar.classList.remove('active');
+                if (burger) burger.classList.remove('active');
             }
 
             loadTabData(tabId);
@@ -1151,18 +1179,36 @@
         }
 
         async function loadTabData(tabId) {
+            const bodyId = tabId === 'overview' ? 'overview-table-body' : 
+                           tabId === 'bookings' ? 'bookings-table-body' :
+                           tabId === 'cancellations' ? 'cancellations-table-body' :
+                           tabId === 'drivers' ? 'fleet-table-body' :
+                           tabId === 'users' ? 'users-table-body' :
+                           tabId === 'vendors' ? 'vendors-table-body' :
+                           tabId === 'applications' ? 'applications-table-body' :
+                           tabId === 'app-history' ? 'app-history-table-body' :
+                           tabId === 'tariffs' ? 'tariffs-table-body' : null;
+            
+            const body = bodyId ? document.getElementById(bodyId) : null;
+
             try {
                 if (tabId === 'overview') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/stats`);
                     const stats = await res.json();
-                    document.getElementById('stat-revenue').textContent = `₹${stats.revenue.toLocaleString()}`;
-                    document.getElementById('stat-active').textContent = stats.activeBookings;
-                    document.getElementById('stat-drivers').textContent = stats.totalDrivers;
-                    document.getElementById('stat-users').textContent = stats.totalUsers;
+                    
+                    const rev = document.getElementById('stat-revenue');
+                    const act = document.getElementById('stat-active');
+                    const dri = document.getElementById('stat-drivers');
+                    const usr = document.getElementById('stat-users');
+                    
+                    if (rev) rev.textContent = `₹${stats.revenue.toLocaleString()}`;
+                    if (act) act.textContent = stats.activeBookings;
+                    if (dri) dri.textContent = stats.totalDrivers;
+                    if (usr) usr.textContent = stats.totalUsers;
 
                     const resB = await fetch(`${API_BASE_URL}/api/admin/bookings`);
                     const bookings = await resB.json();
-                    const body = document.getElementById('overview-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     bookings.slice(0, 5).forEach(b => {
                         body.innerHTML += `
@@ -1184,7 +1230,7 @@
                 } else if (tabId === 'bookings') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/bookings`);
                     const bookings = await res.json();
-                    const body = document.getElementById('bookings-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     bookings.forEach(b => {
                         const isAssigned = b.status === 'assigned';
@@ -1210,7 +1256,7 @@
                 } else if (tabId === 'drivers') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/drivers`);
                     const drivers = await res.json();
-                    const body = document.getElementById('fleet-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     drivers.forEach(d => {
                         body.innerHTML += `
@@ -1240,7 +1286,7 @@
                 } else if (tabId === 'users') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/users`);
                     const passengers = await res.json();
-                    const body = document.getElementById('users-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     passengers.forEach(u => {
                         body.innerHTML += `
@@ -1264,7 +1310,7 @@
                 } else if (tabId === 'cancellations') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/bookings`);
                     const bookings = await res.json();
-                    const body = document.getElementById('cancellations-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     bookings.filter(b => b.status === 'cancel_requested').forEach(b => {
                         body.innerHTML += `
@@ -1286,7 +1332,7 @@
                 } else if (tabId === 'vendors') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/vendors`);
                     const vendors = await res.json();
-                    const body = document.getElementById('vendors-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     vendors.forEach(v => {
                         body.innerHTML += `
@@ -1310,7 +1356,7 @@
                 } else if (tabId === 'applications') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications`);
                     const { applications } = await res.json();
-                    const body = document.getElementById('applications-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     applications.forEach(app => {
                         const hasAllDocs = app.dl_front && app.rc_book && app.aadhar_front;
@@ -1343,7 +1389,7 @@
                 } else if (tabId === 'app-history') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/driver-applications/history`);
                     const { applications } = await res.json();
-                    const body = document.getElementById('app-history-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     applications.forEach(app => {
                         body.innerHTML += `
@@ -1370,7 +1416,7 @@
                 } else if (tabId === 'tariffs') {
                     const res = await fetch(`${API_BASE_URL}/api/tariffs`);
                     const tariffs = await res.json();
-                    const body = document.getElementById('tariffs-table-body');
+                    if (!body) return;
                     body.innerHTML = '';
                     tariffs.forEach(t => {
                         const config = typeof t.config === 'string' ? JSON.parse(t.config) : t.config;
@@ -1906,9 +1952,6 @@
             </div>
         </div>
     </div>
-
-        });
-    </script>
 
     <!-- Tariff Configuration Modal -->
     <div id="tariff-modal" class="map-modal" style="display: none;">

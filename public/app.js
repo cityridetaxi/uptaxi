@@ -203,8 +203,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (pickupCoords && dropCoords) {
             try {
-                // OSRM: No API key required for public demo instance
-                const url = `https://router.project-osrm.org/route/v1/driving/${pickupCoords};${dropCoords}?overview=false`;
+                // OSRM via Proxy
+                const url = `${API_BASE_URL}/api/proxy/route?pickup=${pickupCoords}&drop=${dropCoords}`;
                 const response = await fetch(url);
                 const data = await response.json();
 
@@ -399,7 +399,7 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             timeout = setTimeout(async () => {
-                const url = `https://photon.komoot.io/api/?q=${encodeURIComponent(query)}&limit=5&lang=en&lon=77.2167&lat=28.6667`; 
+                const url = `${API_BASE_URL}/api/proxy/geocode?q=${encodeURIComponent(query)}&limit=5&lang=en&lon=77.2167&lat=28.6667`; 
                 try {
                     const res = await fetch(url);
                     if (!res.ok) throw new Error('API Response Error');
@@ -469,9 +469,9 @@ document.addEventListener('DOMContentLoaded', () => {
             pickupInput.dataset.coords = coords;
             pickupCoords = coords;
 
-            // Reverse Geocode
+            // Reverse Geocode via Proxy
             try {
-                const res = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`);
+                const res = await fetch(`${API_BASE_URL}/api/proxy/reverse?lon=${lng}&lat=${lat}`);
                 const data = await res.json();
                 if (data.features && data.features.length > 0) {
                     const p = data.features[0].properties;
@@ -551,9 +551,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (currentPickingType === 'pickup') pickupCoords = tempCoords;
         else dropCoords = tempCoords;
 
-        // Reverse Geocoding via Photon (Free)
+        // Reverse Geocoding via Proxy
         try {
-            const res = await fetch(`https://photon.komoot.io/reverse?lon=${lng}&lat=${lat}`);
+            const res = await fetch(`${API_BASE_URL}/api/proxy/reverse?lon=${lng}&lat=${lat}`);
             const data = await res.json();
             if (data.features && data.features.length > 0) {
                 const p = data.features[0].properties;
@@ -651,8 +651,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 document.getElementById('drop').removeAttribute('data-coords');
                 pickupCoords = null;
                 dropCoords = null;
-
-                updateVehicleSelection();
+                
+                // Clear the vehicle options container
+                document.getElementById('vehicle-selection-container').innerHTML = '';
 
                 // Redirect to Travelers Hub
                 window.location.href = '/dashboard';
