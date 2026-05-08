@@ -1303,7 +1303,14 @@
                                 <td data-label="Details" style="padding: 1.5rem; text-align: left;">
                                     <span style="font-size:0.65rem; font-weight:800; color:#B71C1C; text-transform:uppercase; background:#fbe9e7; padding:2px 6px; border-radius:4px; margin-bottom:0.3rem; display:inline-block;">${(b.trip_type === 'round' ? 'Round Trip' : (b.trip_type === 'rental' ? 'Local Rental' : (b.trip_type || 'One Way').replace('_', ' ')))}</span><br>
                                     <strong>${b.pickup_loc}</strong><br>
-                                    <span style="font-size:0.8rem; color:#888">${b.drop_loc}</span>
+                                    <span style="font-size:0.8rem; color:#888">${b.drop_loc}</span><br>
+                                    ${b.trip_type === 'rental' && b.start_odometer ? `
+                                        <div style="margin-top:0.5rem; font-size:0.75rem; background:#fff3e0; padding:8px; border-radius:8px; border:1px solid #ffe0b2;">
+                                            <div style="font-weight:800; color:#e65100; font-size:0.65rem; text-transform:uppercase; margin-bottom:4px;">Rental Audit</div>
+                                            <b>Odo:</b> ${b.start_odometer} - ${b.end_odometer || '...'} <br>
+                                            ${b.journey_start_time && b.journey_end_time ? `<b>Time:</b> ${((new Date(b.journey_end_time) - new Date(b.journey_start_time)) / (1000 * 60 * 60)).toFixed(2)} Hrs` : ''}
+                                        </div>
+                                    ` : ''}
                                 </td>
                                 <td data-label="Financials">${financialInfo}</td>
                                 <td data-label="Driver">${b.driver_name || '<span style="color:#aaa">Unassigned</span>'}</td>

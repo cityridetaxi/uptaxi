@@ -100,8 +100,8 @@
 
             <form id="driver-login-form">
                 <div class="input-group">
-                    <label>Partner Email</label>
-                    <input type="email" id="login-email" placeholder="driver@cityridetaxi.com" required>
+                    <label>Phone Number</label>
+                    <input type="tel" id="login-phone" placeholder="+91 00000 00000" required>
                 </div>
                 <div class="input-group">
                     <label>Access Key</label>
@@ -124,14 +124,14 @@
     <script>
         document.getElementById('driver-login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
-            const email = document.getElementById('login-email').value;
+            const phone = document.getElementById('login-phone').value;
             const password = document.getElementById('login-password').value;
 
             try {
                 const res = await fetch(`${API_BASE_URL}/api/driver/login`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ email, password })
+                    body: JSON.stringify({ phone, password })
                 });
 
                 const result = await res.json();

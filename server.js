@@ -193,6 +193,8 @@ async function initDB() {
         // Migration: Ensure columns exist
         try { await db.query('ALTER TABLE drivers ADD COLUMN is_blocked TINYINT DEFAULT 0'); } catch (e) {}
         try { await db.query('ALTER TABLE drivers ADD COLUMN approval_status VARCHAR(20) DEFAULT "approved"'); } catch (e) {}
+        try { await db.query('ALTER TABLE drivers ADD UNIQUE (phone)'); } catch (e) {}
+        try { await db.query('ALTER TABLE driver_applications ADD UNIQUE (phone)'); } catch (e) {}
         
         // Add Document Columns to Drivers if missing
         const docCols = ['dl_front', 'dl_back', 'pvc', 'aadhar_front', 'aadhar_back', 'rc_book', 'insurance', 'pollution', 'permit'];
@@ -303,6 +305,9 @@ async function initDB() {
         try { await db.query('ALTER TABLE bookings ADD COLUMN end_odometer INT NULL'); } catch(e){}
         try { await db.query('ALTER TABLE bookings ADD COLUMN journey_start_time DATETIME NULL'); } catch(e){}
         try { await db.query('ALTER TABLE bookings ADD COLUMN journey_end_time DATETIME NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE bookings ADD COLUMN rental_package VARCHAR(50) NULL'); } catch(e){}
+        // Ensure status column can handle 'finished'
+        try { await db.query("ALTER TABLE bookings MODIFY COLUMN status ENUM('pending', 'assigned', 'ongoing', 'finished', 'completed', 'cancelled', 'cancel_requested') DEFAULT 'pending'"); } catch(e){}
 
         // Migration: Vendor Support
         try { await db.query('ALTER TABLE bookings ADD COLUMN vendor_id INT NULL'); } catch(e){}
@@ -713,8 +718,8 @@ app.post('/api/admin/login', async (req, res) => {
 // 4. Partner Pilot Login
 app.post('/api/driver/login', async (req, res) => {
     try {
-        const { email, password } = req.body;
-        const [drivers] = await db.query('SELECT id, name, email, phone, car_model, car_number, vehicle_type, wallet_balance, password, is_blocked FROM drivers WHERE email = ?', [email]);
+        const { phone, password } = req.body;
+        const [drivers] = await db.query('SELECT id, name, email, phone, car_model, car_number, vehicle_type, wallet_balance, password, is_blocked FROM drivers WHERE phone = ?', [phone]);
         
         if (drivers.length > 0) {
             const user = drivers[0];
@@ -726,7 +731,7 @@ app.post('/api/driver/login', async (req, res) => {
                 return res.json({ success: true, user });
             }
         }
-        res.status(401).json({ error: 'Pilot Authorization Denied.' });
+        res.status(401).json({ error: 'Pilot Authorization Denied. Invalid phone number or password.' });
     } catch (err) {
         res.status(500).json({ error: 'Pilot Auth Failure' });
     }
@@ -817,10 +822,16 @@ app.post('/api/driver/register', upload.fields([
         // }
 
         // Check availability
-        const [existing] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
-        const [existingDriver] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
-        if (existing.length > 0 || existingDriver.length > 0) {
+        const [existingEmail] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
+        const [existingDriverEmail] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
+        const [existingPhone] = await db.query('SELECT id FROM driver_applications WHERE phone = ?', [phone]);
+        const [existingDriverPhone] = await db.query('SELECT id FROM drivers WHERE phone = ?', [phone]);
+
+        if (existingEmail.length > 0 || existingDriverEmail.length > 0) {
             return res.status(400).json({ error: 'This email is already registered or has a pending application.' });
+        }
+        if (existingPhone.length > 0 || existingDriverPhone.length > 0) {
+            return res.status(400).json({ error: 'This phone number is already registered or has a pending application.' });
         }
 
         const salt = await bcrypt.genSalt(10);
@@ -1079,9 +1090,10 @@ app.post('/api/bookings/create', async (req, res) => {
             journeyOtp,
             'pending',
             booking.vendorId || null,
-            booking.vendorMarkup || 0
+            booking.vendorMarkup || 0,
+            booking.rentalPackage || null
         ];
-        const [result] = await db.query('INSERT INTO bookings (user_id, pickup_loc, pickup_coords, drop_loc, drop_coords, pickup_date, pickup_time, passengers, vehicle_type, trip_type, fare, distance, journey_otp, status, vendor_id, vendor_markup) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values);
+        const [result] = await db.query('INSERT INTO bookings (user_id, pickup_loc, pickup_coords, drop_loc, drop_coords, pickup_date, pickup_time, passengers, vehicle_type, trip_type, fare, distance, journey_otp, status, vendor_id, vendor_markup, rental_package) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values);
         res.json({ success: true, bookingId: result.insertId, journeyOtp: journeyOtp });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1266,7 +1278,7 @@ app.get('/api/driver/my-jobs/:driverId', async (req, res) => {
             SELECT b.*, u.name as customer_name, u.phone as customer_phone 
             FROM bookings b 
             LEFT JOIN passengers u ON b.user_id = u.id 
-            WHERE b.driver_id = ? AND b.status IN ("assigned", "completed", "cancel_requested")
+            WHERE b.driver_id = ? AND b.status IN ("assigned", "ongoing", "finished", "completed", "cancel_requested")
             ORDER BY b.created_at DESC
         `;
         const [rows] = await db.query(sql, [req.params.driverId]);
@@ -1571,7 +1583,7 @@ app.post('/api/bookings/update-status', async (req, res) => {
         
         // If completing, verify OTP
         if (status === 'completed') {
-            const [rows] = await db.query('SELECT journey_otp, status, trip_type, start_odometer, journey_start_time, vehicle_type, vendor_id, vendor_markup, driver_id, fare FROM bookings WHERE id = ?', [bookingId]);
+            const [rows] = await db.query('SELECT journey_otp, status, trip_type, rental_package, start_odometer, journey_start_time, vehicle_type, vendor_id, vendor_markup, driver_id, fare FROM bookings WHERE id = ?', [bookingId]);
             if (rows.length === 0) return res.status(404).json({ error: 'Booking missing.' });
             
             const booking = rows[0];
@@ -1588,15 +1600,12 @@ app.post('/api/bookings/update-status', async (req, res) => {
                 console.log(`[FINANCE] Deducted ₹${vendorProfitDeducted} vendor profit from Driver #${booking.driver_id} for Ride #B${bookingId}`);
             }
 
-            // Handle Rental Calculations
+            // Handle Rental Calculations (Legacy - now handled in /finish-trip)
             if (booking.trip_type === 'rental') {
-                if (!endOdometer) return res.status(400).json({ error: 'End Odometer reading is required for Local Rentals.' });
-                
-                const distanceCovered = parseInt(endOdometer) - parseInt(booking.start_odometer);
-                if (distanceCovered < 0) return res.status(400).json({ error: 'End Odometer cannot be less than Start Odometer.' });
-
-                // Update booking with end details
-                await db.query('UPDATE bookings SET end_odometer = ?, journey_end_time = NOW() WHERE id = ?', [endOdometer, bookingId]);
+                // If they bypassed finish-trip somehow, we still need journey_end_time
+                if (!booking.journey_end_time) {
+                    await db.query('UPDATE bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
+                }
             } else {
                 // Non-rental rides also record end time
                 await db.query('UPDATE bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
@@ -1614,6 +1623,67 @@ app.post('/api/bookings/update-status', async (req, res) => {
         
         await db.query('UPDATE bookings SET status = ? WHERE id = ?', [status, bookingId]);
         res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// 2.8 Finish Trip (Odometer Input & Fare Calculation)
+app.post('/api/bookings/finish-trip', async (req, res) => {
+    try {
+        const { bookingId, endOdometer } = req.body;
+        if (!endOdometer) return res.status(400).json({ error: 'End Odometer reading is required.' });
+
+        const [rows] = await db.query('SELECT * FROM bookings WHERE id = ?', [bookingId]);
+        if (rows.length === 0) return res.status(404).json({ error: 'Booking not found.' });
+
+        const booking = rows[0];
+        const distanceCovered = parseInt(endOdometer) - parseInt(booking.start_odometer);
+        if (distanceCovered < 0) return res.status(400).json({ error: 'End Odometer cannot be less than Start Odometer.' });
+
+        let finalFareStr = booking.fare;
+        let durationHrs = null;
+
+        if (booking.trip_type === 'rental') {
+            const [tariffRows] = await db.query('SELECT config FROM tariffs WHERE vehicle_type = ? AND category = "rental"', [booking.vehicle_type]);
+            if (tariffRows.length > 0) {
+                const config = typeof tariffRows[0].config === 'string' ? JSON.parse(tariffRows[0].config) : tariffRows[0].config;
+                const packageConfig = config[booking.rental_package];
+                
+                if (packageConfig) {
+                    const [pMaxHrs, pMaxKm] = booking.rental_package.split('-').map(Number);
+                    
+                    // 1. Distance Calculation
+                    const extraKm = Math.max(0, distanceCovered - pMaxKm);
+                    const extraKmCharge = extraKm * packageConfig.extraKm;
+
+                    // 2. Time Calculation
+                    const startTime = new Date(booking.journey_start_time);
+                    const endTime = new Date();
+                    const durationMs = endTime - startTime;
+                    durationHrs = durationMs / (1000 * 60 * 60);
+                    
+                    const extraHrs = Math.max(0, Math.ceil(durationHrs - pMaxHrs));
+                    const extraHrCharge = extraHrs * packageConfig.extraHour;
+
+                    const totalExtra = extraKmCharge + extraHrCharge;
+                    const baseWithExtra = packageConfig.base + totalExtra;
+                    const finalFareNum = Math.ceil(baseWithExtra * 1.05); // Incl 5% GST
+                    
+                    finalFareStr = `₹${finalFareNum}`;
+                }
+            }
+        }
+
+        // Update booking to 'finished' state
+        await db.query('UPDATE bookings SET status = "finished", end_odometer = ?, journey_end_time = NOW(), fare = ? WHERE id = ?', [endOdometer, finalFareStr, bookingId]);
+        
+        res.json({ 
+            success: true, 
+            finalFare: finalFareStr, 
+            distance: distanceCovered,
+            duration: durationHrs ? durationHrs.toFixed(2) : null 
+        });
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

@@ -324,6 +324,8 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (actualTwoWayDist < 250) detailLabel += ` [250KM Min Applied]`;
                 } else if (tType.id === 'rental') {
                     if (!info.rental) return;
+                    const packageVal = rentalPackageSelect ? rentalPackageSelect.value : '2-20';
+                    const [pMaxHrs, pMaxKm] = packageVal.split('-').map(Number);
                     const config = info.rental[packageVal];
                     if (!config) return;
                     const extraKm = Math.max(0, distance - pMaxKm);

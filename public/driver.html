@@ -15,6 +15,9 @@
     <!-- Leaflet for Mission Tracking -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <!-- Phosphor Icons & SweetAlert2 -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
     <style>
         .driver-container {
             padding: 120px 0;
@@ -98,6 +101,48 @@
             padding: 1.5rem;
             border-radius: 16px;
             margin-bottom: 1.5rem;
+        }
+
+        /* GPS Status Badges */
+        .gps-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            border-radius: 50px;
+            font-size: 0.75rem;
+            font-weight: 800;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+        }
+        .gps-locked { background: #e8f5e9; color: #2e7d32; border: 1px solid #c8e6c9; }
+        .gps-searching { background: #fff3e0; color: #e65100; border: 1px solid #ffe0b2; }
+        .gps-disabled { background: #ffebee; color: #c62828; border: 1px solid #ffcdd2; }
+        
+        .pulse-soft {
+            animation: pulse-soft 2s infinite;
+        }
+        @keyframes pulse-soft {
+            0%, 100% { opacity: 0.7; transform: scale(0.98); }
+            50% { opacity: 1; transform: scale(1); }
+        }
+
+        .nav-link-btn {
+            padding: 0.5rem 1rem;
+            font-size: 0.8rem;
+            font-weight: 700;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            border-radius: 12px;
+            text-decoration: none;
+            transition: all 0.2s ease;
+        }
+        .nav-link-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
 
         .customer-info {
@@ -198,7 +243,13 @@
             <div style="margin-bottom: 3rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1.5rem;">
                 <div>
                     <h1>CityRide Driver: <span id="driver-name" class="text-accent">Loading...</span></h1>
-                    <p id="car-info" style="color: #666; margin-top: 0.5rem;">Vehicle: Loading...</p>
+                    <div style="display: flex; align-items: center; gap: 1rem; margin-top: 0.5rem;">
+                        <p id="car-info" style="color: #666; margin: 0;">Vehicle: Loading...</p>
+                        <div id="gps-status-pill" class="gps-badge gps-searching pulse-soft">
+                            <i class="ph ph-gps-fixed"></i>
+                            <span id="gps-status-text">Acquiring GPS...</span>
+                        </div>
+                    </div>
                 </div>
                 <div style="background: #1a1a1a; color: white; padding: 1.5rem 2.5rem; border-radius: 16px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-left: 4px solid var(--primary-red);">
                     <p style="margin: 0; font-size: 0.8rem; color: rgba(255,255,255,0.6); text-transform: uppercase; letter-spacing: 1px;">Wallet Balance</p>
@@ -290,6 +341,94 @@
     <script>
         let isMapInitialized = false;
         let driverMap = null;
+        let gpsWatchId = null;
+        let lastBestPos = null;
+        let isGpsLocked = false;
+        let driverMarker = null;
+
+        function updateGpsUI(status, accuracy = null) {
+            const pill = document.getElementById('gps-status-pill');
+            const text = document.getElementById('gps-status-text');
+            if (!pill || !text) return;
+            
+            pill.className = 'gps-badge';
+            if (status === 'searching') {
+                pill.classList.add('gps-searching', 'pulse-soft');
+                text.textContent = accuracy ? `Signal: ±${Math.round(accuracy)}m` : 'Acquiring GPS...';
+            } else if (status === 'locked') {
+                pill.classList.add('gps-locked');
+                text.textContent = accuracy ? `Locked (±${Math.round(accuracy)}m)` : 'GPS Locked';
+            } else if (status === 'disabled') {
+                pill.classList.add('gps-disabled');
+                text.textContent = 'GPS Disabled';
+            }
+        }
+
+        function updateDriverMarkerOnMap(lat, lng) {
+            if (!driverMap) return;
+            if (driverMarker) {
+                driverMarker.setLatLng([lat, lng]);
+            } else {
+                const driverIcon = L.divIcon({
+                    className: 'driver-marker-wrap',
+                    html: `<div style="background:var(--primary-red); width:18px; height:18px; border-radius:50%; border:3px solid white; box-shadow:0 0 10px rgba(0,0,0,0.3); position:relative;">
+                             <div style="position:absolute; top:-4px; left:-4px; right:-4px; bottom:-4px; border:2px solid var(--primary-red); border-radius:50%; animation:pulse 2s infinite;"></div>
+                           </div>`,
+                    iconSize: [24, 24]
+                });
+                driverMarker = L.marker([lat, lng], { icon: driverIcon }).addTo(driverMap).bindPopup('<b>You are here</b>');
+            }
+        }
+
+        function startGpsTracking() {
+            if (!navigator.geolocation) {
+                updateGpsUI('disabled');
+                return;
+            }
+
+            const startTime = Date.now();
+            updateGpsUI('searching');
+
+            if (gpsWatchId) navigator.geolocation.clearWatch(gpsWatchId);
+
+            gpsWatchId = navigator.geolocation.watchPosition((pos) => {
+                const acc = pos.coords.accuracy;
+                const elapsed = Date.now() - startTime;
+                
+                if (!lastBestPos || acc < lastBestPos.coords.accuracy) {
+                    lastBestPos = pos;
+                }
+
+                // Tiered Logic
+                if (acc <= 30) {
+                    isGpsLocked = true;
+                    updateGpsUI('locked', acc);
+                } else {
+                    updateGpsUI('searching', acc);
+                }
+
+                // Update map if visible
+                if (isGpsLocked || (acc <= 80 && elapsed >= 3000)) {
+                    updateDriverMarkerOnMap(pos.coords.latitude, pos.coords.longitude);
+                }
+            }, (err) => {
+                console.warn('GPS Status:', err.message);
+                if (err.code === 3) {
+                    // Timeout is common, just keep searching
+                    updateGpsUI('searching');
+                    return;
+                }
+                if (err.code === 2 || err.code === 1) {
+                    updateGpsUI('disabled');
+                    Swal.fire({
+                        icon: 'warning',
+                        title: 'GPS Signal Required',
+                        text: 'Please enable high-accuracy location services to navigate missions.',
+                        confirmButtonColor: '#b71c1c'
+                    });
+                }
+            }, { enableHighAccuracy: true, timeout: 30000, maximumAge: 0 });
+        }
         let opportunityMap = null;
         let opportunityMarkers = [];
         let currentTacticalJobId = null;
@@ -332,10 +471,16 @@
                     if(data.success) {
                         const bal = parseFloat(data.driver.wallet_balance || 0).toFixed(2);
                         document.getElementById('wallet-balance').textContent = bal;
+                        document.getElementById('driver-name').textContent = data.driver.name;
+                        document.getElementById('car-info').textContent = `Vehicle: ${data.driver.car_model || '---'} (${data.driver.car_number || '---'})`;
+                        
                         // update local storage safely
                         const user = JSON.parse(localStorage.getItem('cityride_pilot'));
                         user.wallet_balance = data.driver.wallet_balance;
                         localStorage.setItem('cityride_pilot', JSON.stringify(user));
+                        
+                        // Initialize GPS on first successful profile load
+                        if (!gpsWatchId) startGpsTracking();
                     }
                 }
             } catch (err) { console.error('Failed to update wallet info'); }
@@ -497,7 +642,7 @@
                 container.innerHTML = jobs.length ? '' : '<p class="empty-state">You have no active assignments.</p>';
                 
                 // Find Active Mission (assigned, ongoing, or awaiting cancellation)
-                const activeMission = jobs.find(j => ['assigned', 'ongoing', 'cancel_requested'].includes(j.status));
+                const activeMission = jobs.find(j => ['assigned', 'ongoing', 'finished', 'cancel_requested'].includes(j.status));
                 const activeContainer = document.getElementById('active-mission-container');
                 
                 if (activeMission) {
@@ -520,14 +665,41 @@
                                     <div style="font-size:0.85rem; color: #7b1fa2; font-weight: 700; text-transform: uppercase; margin-top:0.5rem;">Type: ${(activeMission.trip_type === 'round' ? 'Round Trip' : (activeMission.trip_type === 'rental' ? 'Local Rental' : (activeMission.trip_type || 'One Way').replace('_', ' ')))}</div>
                                     <div style="font-size:0.85rem; margin-top:0.4rem; font-weight:700; color:var(--text-muted)">Booking ID: #B${activeMission.id}</div>
                                 </div>
+                                ${activeMission.trip_type === 'rental' && activeMission.start_odometer ? `
+                                    <div style="margin-top:1rem; padding:1.2rem; background:#fff3e0; border-radius:15px; border:1px solid #ffe0b2;">
+                                        <div style="font-weight:700; color:#e65100; margin-bottom:0.5rem; font-size:0.7rem; text-transform:uppercase;">Rental Odometer Audit</div>
+                                        <div style="display:flex; justify-content:space-between; font-size:0.8rem; font-weight:700;">
+                                            <span>Start: ${activeMission.start_odometer}</span>
+                                            ${activeMission.end_odometer ? `<span>End: ${activeMission.end_odometer}</span>` : ''}
+                                        </div>
+                                        ${activeMission.journey_start_time && activeMission.journey_end_time ? `
+                                            <div style="font-size:0.8rem; margin-top:8px; border-top:1px solid #ffe0b2; padding-top:8px; font-weight:800; color:#333;">
+                                                Total Time: ${((new Date(activeMission.journey_end_time) - new Date(activeMission.journey_start_time)) / (1000 * 60 * 60)).toFixed(2)} Hours
+                                            </div>
+                                        ` : activeMission.journey_start_time ? `
+                                            <div style="font-size:0.75rem; margin-top:8px; color:#888;">Trip in progress...</div>
+                                        ` : ''}
+                                    </div>
+                                ` : ''}
+
                                 <div style="margin-top:1.5rem; padding: 0 1rem;">
                                     <div style="margin-bottom:1.5rem;">
                                         <div style="font-size:0.7rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Pickup:</div>
-                                        <div style="font-weight:700; font-size:1.1rem;">${activeMission.pickup_loc}</div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                                            <div style="font-weight:700; font-size:1.1rem;">${activeMission.pickup_loc}</div>
+                                            <a href="https://www.google.com/maps/search/?api=1&query=${activeMission.pickup_coords ? activeMission.pickup_coords.split(',').reverse().join(',') : encodeURIComponent(activeMission.pickup_loc)}" target="_blank" class="nav-link-btn btn-primary" style="background: #1a73e8; white-space: nowrap;">
+                                                <i class="ph ph-navigation-arrow" style="font-size: 1.1rem;"></i> NAV
+                                            </a>
+                                        </div>
                                     </div>
                                     <div>
                                         <div style="font-size:0.7rem; text-transform:uppercase; color:var(--text-muted); font-weight:700;">Dropoff:</div>
-                                        <div style="font-weight:700; font-size:1.1rem;">${activeMission.drop_loc}</div>
+                                        <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                                            <div style="font-weight:700; font-size:1.1rem;">${activeMission.drop_loc}</div>
+                                            <a href="https://www.google.com/maps/search/?api=1&query=${activeMission.drop_coords ? activeMission.drop_coords.split(',').reverse().join(',') : encodeURIComponent(activeMission.drop_loc)}" target="_blank" class="nav-link-btn btn-primary" style="background: #34a853; white-space: nowrap;">
+                                                <i class="ph ph-navigation-arrow" style="font-size: 1.1rem;"></i> NAV
+                                            </a>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -544,7 +716,9 @@
                                         `}
                                         <button class="btn" style="background:#dc3545; color:white; border:none; padding:0.7rem; font-weight:700; border-radius:12px; cursor:pointer;" onclick="requestCancel(${activeMission.id}, ${driverId})">Abort Mission</button>
                                     ` : activeMission.status === 'ongoing' ? `
-                                        <button class="btn btn-primary" style="background:#28a745; border-color:#28a745" onclick="completeRide(${activeMission.id}, ${driverId}, this, true)">Complete Journey</button>
+                                        <button class="btn btn-primary" style="background:#f39c12; border-color:#f39c12" onclick="finishTrip(${activeMission.id}, ${driverId})">Finish Trip (Enter Odo)</button>
+                                    ` : activeMission.status === 'finished' ? `
+                                        <button class="btn btn-primary" style="background:#28a745; border-color:#28a745" onclick="completeRide(${activeMission.id}, ${driverId}, this)">Verify & Complete (OTP)</button>
                                     ` : `
                                         <div style="background:#fff3e0; color:#e65100; padding:1rem; border-radius:12px; font-weight:600; font-size:0.85rem; border:1px solid #ffe0b2;">
                                             🛑 Abort Request is under review by Ground Control.
@@ -568,8 +742,10 @@
 
                                 const getCoords = async (addr, storedCoords) => {
                                     if (storedCoords) return storedCoords.split(',').map(Number);
+                                    if (!addr || addr.trim() === '') return null;
                                     try {
                                         const r = await fetch(`https://photon.komoot.io/api/?q=${encodeURIComponent(addr)}&limit=1`);
+                                        if (!r.ok) return null;
                                         const d = await r.json();
                                         return d.features[0]?.geometry.coordinates;
                                     } catch (e) { return null; }
@@ -689,22 +865,40 @@
             } catch (err) { alert('Network error during journey start.'); }
         }
 
-        async function completeRide(rideId, driverId, btn, isRental = false) {
-            let endOdo = null;
-            if (isRental) {
-                endOdo = prompt('JOURNEY CONCLUSION\nPlease enter the Closing Odometer reading:');
-                if (!endOdo || isNaN(endOdo)) {
-                    alert('Invalid Odometer reading.');
-                    return;
-                }
+        async function finishTrip(rideId, driverId) {
+            const odo = prompt('JOURNEY CONCLUSION\nPlease enter the Closing Odometer reading:');
+            if (!odo || isNaN(odo)) {
+                alert('Invalid Odometer reading.');
+                return;
             }
 
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/bookings/finish-trip`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingId: rideId, endOdometer: parseInt(odo) })
+                });
+
+                if (res.ok) {
+                    const data = await res.json();
+                    let msg = `🏁 TRIP FINISHED!\nFinal Fare: ${data.finalFare}\nTotal Distance: ${data.distance} KM`;
+                    if (data.duration) msg += `\nTotal Time: ${data.duration} Hours`;
+                    msg += `\n\nNow verify the OTP with the passenger to complete the mission.`;
+                    alert(msg);
+                    loadAllJobs(driverId);
+                } else {
+                    const error = await res.json();
+                    alert('Error: ' + error.error);
+                }
+            } catch (err) { alert('Network error during trip finish.'); }
+        }
+
+        async function completeRide(rideId, driverId, btn) {
             const otp = prompt('MISSION VERIFICATION REQUIRED\n Please enter the 4-digit Identity Token provided by the passenger to conclude this mission:');
             if (!otp) return;
 
             try {
                 const payload = { bookingId: rideId, status: 'completed', otp };
-                if (isRental) payload.endOdometer = parseInt(endOdo);
 
                 const res = await fetch(`${API_BASE_URL}/api/bookings/update-status`, {
                     method: 'POST',

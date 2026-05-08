@@ -56,6 +56,55 @@
     <script src="config.js"></script>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="" />
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+    <style>
+        /* Live Location Button Enhancements */
+        .map-picker-link {
+            cursor: pointer;
+            color: var(--primary-red);
+            font-weight: 700;
+            font-size: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 4px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: rgba(183, 28, 28, 0.05);
+            transition: var(--transition);
+        }
+
+        .map-picker-link:hover {
+            background: rgba(183, 28, 28, 0.1);
+            transform: translateY(-1px);
+        }
+
+        .live-location-btn {
+            color: #1a73e8 !important;
+            background: rgba(26, 115, 232, 0.08) !important;
+            border: 1px solid rgba(26, 115, 232, 0.2) !important;
+            position: relative;
+            padding-left: 26px !important;
+        }
+
+        .live-location-btn::before {
+            content: '';
+            position: absolute;
+            left: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 8px;
+            height: 8px;
+            background: #1a73e8;
+            border-radius: 50%;
+            box-shadow: 0 0 0 rgba(26, 115, 232, 0.4);
+            animation: live-pulse 2s infinite;
+        }
+
+        @keyframes live-pulse {
+            0% { box-shadow: 0 0 0 0 rgba(26, 115, 232, 0.4); }
+            70% { box-shadow: 0 0 0 10px rgba(26, 115, 232, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(26, 115, 232, 0); }
+        }
+    </style>
 </head>
 
 <body style="overflow: hidden;"> <!-- Lock scroll during splash -->
@@ -126,9 +175,9 @@
                                 <label for="pickup">
                                     Pickup Location 
                                     <div class="location-actions">
-                                        <span class="map-picker-link" onclick="useLiveLocation(event)">
+                                        <span class="map-picker-link live-location-btn" onclick="useLiveLocation(event)">
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
-                                            Live
+                                            Live Location
                                         </span>
                                         <span class="map-picker-link" onclick="openMapPicker('pickup', event)">
                                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:4px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"></path><circle cx="12" cy="10" r="3"></circle></svg>

@@ -135,6 +135,16 @@
             color: #721C24;
         }
 
+        .status-ongoing {
+            background: #e1f5fe;
+            color: #01579b;
+        }
+
+        .status-finished {
+            background: #fff3e0;
+            color: #e65100;
+        }
+
         /* Ban Banner */
         .ban-banner {
             background: linear-gradient(135deg, #b71c1c, #d32f2f);
@@ -449,6 +459,7 @@
         let isMapInitialized = false;
         let lastSeenStatuses = new Map(); // id -> status
         let initialLoadDone = false;
+        let currentActiveIndex = 0; // State for switching between multiple active missions
 
         document.addEventListener('DOMContentLoaded', () => {
             const user = JSON.parse(localStorage.getItem('cityride_member'));
@@ -508,9 +519,14 @@
                     document.getElementById('stat-recent').textContent = `Ride #B${rides[0].id}`;
                 }
 
-                // Find Active Mission (Last pending or assigned)
-                const activeMission = rides.find(r => r.status === 'pending' || r.status === 'assigned');
-                if (activeMission) {
+                // Find All Active Missions (Last pending, assigned, ongoing, or finished)
+                const activeMissions = rides.filter(r => r.status === 'pending' || r.status === 'assigned' || r.status === 'ongoing' || r.status === 'finished');
+                
+                if (activeMissions.length > 0) {
+                    // Ensure index is within bounds (e.g. if a ride was completed)
+                    if (currentActiveIndex >= activeMissions.length) currentActiveIndex = 0;
+                    
+                    const activeMission = activeMissions[currentActiveIndex];
                     const container = document.getElementById('active-mission-container');
                     const details = document.getElementById('active-details');
                     const statusTag = document.getElementById('active-status');
@@ -518,6 +534,33 @@
                     container.classList.remove('hidden');
                     statusTag.className = `status-pill status-${activeMission.status}`;
                     statusTag.textContent = activeMission.status.toUpperCase();
+
+                    // Switcher UI for multiple active rides
+                    let switcherUI = '';
+                    if (activeMissions.length > 1) {
+                        switcherUI = `
+                            <div style="display: flex; align-items: center; gap: 1rem; background: rgba(0,0,0,0.05); padding: 5px 15px; border-radius: 20px;">
+                                <button onclick="changeActiveRide(-1, ${activeMissions.length})" style="background:none; border:none; cursor:pointer; font-weight:bold; font-size:1.2rem; color:var(--primary-red); padding:0 5px;">&lsaquo;</button>
+                                <span style="font-size:0.75rem; font-weight:700; color:var(--text-muted)">Ride ${currentActiveIndex + 1} of ${activeMissions.length}</span>
+                                <button onclick="changeActiveRide(1, ${activeMissions.length})" style="background:none; border:none; cursor:pointer; font-weight:bold; font-size:1.2rem; color:var(--primary-red); padding:0 5px;">&rsaquo;</button>
+                            </div>
+                        `;
+                    }
+                    
+                    // Add Switcher to Header if present
+                    const headerContainer = container.querySelector('div[style*="display: flex"]');
+                    if (headerContainer) {
+                        // Check if switcher already exists to avoid duplication or just replace innerHTML carefully
+                        let existingSwitcher = headerContainer.querySelector('.active-switcher');
+                        if (existingSwitcher) existingSwitcher.remove();
+                        
+                        if (switcherUI) {
+                            const switcherDiv = document.createElement('div');
+                            switcherDiv.className = 'active-switcher';
+                            switcherDiv.innerHTML = switcherUI;
+                            headerContainer.insertBefore(switcherDiv, statusTag);
+                        }
+                    }
 
                     let activeDriver = 'Searching for CityRide Driver...';
                     if (activeMission.driver_name) {
@@ -539,7 +582,10 @@
                                 <div style="font-weight:700; font-size:1.1rem;">${activeMission.drop_loc}</div>
                             </div>
                             <div style="margin-top:2rem; padding:1.5rem; background:white; border-radius:15px; border:1px solid #eee;">
-                                <div style="font-weight:600; color:var(--primary-red); margin-bottom:0.5rem;">Ride Details</div>
+                                <div style="font-weight:600; color:var(--primary-red); margin-bottom:0.5rem; display:flex; justify-content:space-between; align-items:center;">
+                                    <span>Ride Details</span>
+                                    <span style="font-size:0.75rem; background:rgba(183,28,28,0.1); padding:2px 8px; border-radius:5px;">ID: #B${activeMission.id}</span>
+                                </div>
                                 <div style="font-size:0.95rem; font-weight:700;">Total Distance: <span style="color:var(--primary-red)">${activeMission.distance || '0 KM'}</span></div>
                                 <div style="font-size:0.95rem; font-weight:700;">Estimated Fare: <span style="color:var(--primary-red)">${activeMission.fare}</span></div>
                             </div>
@@ -682,6 +728,13 @@
                 if (data.banned) showBanBanner(data.banned_until);
                 else hideBanBanner();
             } catch (e) {}
+        }
+
+        // Switcher logic for multiple active missions
+        function changeActiveRide(delta, max) {
+            const user = JSON.parse(localStorage.getItem('cityride_member'));
+            currentActiveIndex = (currentActiveIndex + delta + max) % max;
+            loadDashboardData(user);
         }
 
     </script>
