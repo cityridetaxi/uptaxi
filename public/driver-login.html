@@ -122,6 +122,28 @@
     </div>
 
     <script>
+        // Persistence Logic
+        const LOGIN_KEY = 'cityride_driver_login_draft';
+        function setupPersistence() {
+            const form = document.getElementById('driver-login-form');
+            const saved = localStorage.getItem(LOGIN_KEY);
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.phone) document.getElementById('login-phone').value = data.phone;
+                if (data.password) document.getElementById('login-password').value = data.password;
+            }
+
+            form.addEventListener('input', () => {
+                const data = {
+                    phone: document.getElementById('login-phone').value,
+                    password: document.getElementById('login-password').value
+                };
+                localStorage.setItem(LOGIN_KEY, JSON.stringify(data));
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', setupPersistence);
+
         document.getElementById('driver-login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const phone = document.getElementById('login-phone').value;
@@ -138,6 +160,7 @@
 
                 if (res.ok) {
                     localStorage.setItem('cityride_pilot', JSON.stringify(result.user));
+                    localStorage.removeItem(LOGIN_KEY);
                     window.location.href = '/driver';
                 } else {
                     alert(result.error);

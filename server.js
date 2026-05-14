@@ -657,7 +657,16 @@ app.post('/api/auth/register', async (req, res) => {
         // Cleanup OTP (DISABLED)
         // await db.query('DELETE FROM otps WHERE email = ?', [email]);
         
-        res.json({ success: true, userId: result.insertId });
+        res.json({ 
+            success: true, 
+            user: {
+                id: result.insertId,
+                name,
+                email,
+                phone,
+                role: 'user'
+            }
+        });
     } catch (err) {
         res.status(500).json({ error: 'Registry Failure' });
     }

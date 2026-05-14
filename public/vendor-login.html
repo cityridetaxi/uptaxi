@@ -79,6 +79,28 @@
     </div>
 
     <script>
+        // Persistence Logic
+        const VENDOR_KEY = 'cityride_vendor_login_draft';
+        function setupPersistence() {
+            const form = document.getElementById('vendor-login-form');
+            const saved = localStorage.getItem(VENDOR_KEY);
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.id) document.getElementById('v-id').value = data.id;
+                if (data.pass) document.getElementById('v-pass').value = data.pass;
+            }
+
+            form.addEventListener('input', () => {
+                const data = {
+                    id: document.getElementById('v-id').value,
+                    pass: document.getElementById('v-pass').value
+                };
+                localStorage.setItem(VENDOR_KEY, JSON.stringify(data));
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', setupPersistence);
+
         document.getElementById('vendor-login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const vendor_id = document.getElementById('v-id').value;
@@ -93,6 +115,7 @@
                 const data = await res.json();
                 if (res.ok) {
                     localStorage.setItem('cityride_vendor', JSON.stringify(data.user));
+                    localStorage.removeItem(VENDOR_KEY);
                     window.location.href = '/vendor';
                 } else {
                     alert(data.error);

@@ -190,6 +190,28 @@
     </div>
 
     <script>
+        // Persistence Logic
+        const ADMIN_KEY = 'cityride_admin_login_draft';
+        function setupPersistence() {
+            const form = document.getElementById('admin-login-form');
+            const saved = localStorage.getItem(ADMIN_KEY);
+            if (saved) {
+                const data = JSON.parse(saved);
+                if (data.id) document.getElementById('admin-id').value = data.id;
+                if (data.pass) document.getElementById('admin-pass').value = data.pass;
+            }
+
+            form.addEventListener('input', () => {
+                const data = {
+                    id: document.getElementById('admin-id').value,
+                    pass: document.getElementById('admin-pass').value
+                };
+                localStorage.setItem(ADMIN_KEY, JSON.stringify(data));
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', setupPersistence);
+
         document.getElementById('admin-login-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const email = document.getElementById('admin-id').value;
@@ -206,6 +228,7 @@
 
                 if (res.ok) {
                     localStorage.setItem('cityride_master', JSON.stringify(result.user));
+                    localStorage.removeItem(ADMIN_KEY);
                     window.location.href = '/admin';
                 } else {
                     alert('Invalid credentials. Access attempt logged.');

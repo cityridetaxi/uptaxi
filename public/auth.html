@@ -223,11 +223,48 @@
             if (type === 'login') {
                 document.querySelector('.auth-tab:nth-child(1)').classList.add('active');
                 document.getElementById('login-form').classList.add('active');
+                localStorage.setItem('auth_tab', 'login');
             } else {
                 document.querySelector('.auth-tab:nth-child(2)').classList.add('active');
                 document.getElementById('register-form').classList.add('active');
+                localStorage.setItem('auth_tab', 'register');
             }
         }
+
+        // Persistence Logic
+        function setupPersistence(formId, storageKey) {
+            const form = document.getElementById(formId);
+            const saved = localStorage.getItem(storageKey);
+            
+            if (saved) {
+                const data = JSON.parse(saved);
+                Object.keys(data).forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) {
+                        if (el.type === 'checkbox') el.checked = data[id];
+                        else el.value = data[id];
+                    }
+                });
+            }
+
+            form.addEventListener('input', () => {
+                const data = {};
+                form.querySelectorAll('input').forEach(input => {
+                    if (input.id) {
+                        data[input.id] = input.type === 'checkbox' ? input.checked : input.value;
+                    }
+                });
+                localStorage.setItem(storageKey, JSON.stringify(data));
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            setupPersistence('login-form', 'cityride_login_draft');
+            setupPersistence('register-form', 'cityride_reg_draft');
+            
+            const savedTab = localStorage.getItem('auth_tab');
+            if (savedTab) switchAuth(savedTab);
+        });
 
         // Handle Login
         document.getElementById('login-form').addEventListener('submit', async (e) => {
@@ -247,6 +284,8 @@
                 if (res.ok) {
                     // This is only for travelers/passengers
                     localStorage.setItem('cityride_member', JSON.stringify(result.user));
+                    localStorage.removeItem('cityride_login_draft');
+                    localStorage.removeItem('auth_tab');
                     window.location.href = '/';
                 } else {
                     alert(result.error);
@@ -280,8 +319,11 @@
                 });
                 const result = await res.json();
                 if (res.ok) {
-                    alert('Identity Verified! Welcome to the CityRide Network. Please login.');
-                    switchAuth('login');
+                    alert('Identity Verified! Welcome to the CityRide Network.');
+                    localStorage.removeItem('cityride_reg_draft');
+                    localStorage.removeItem('auth_tab');
+                    localStorage.setItem('cityride_member', JSON.stringify(result.user));
+                    window.location.href = '/';
                 } else {
                     alert(result.error);
                 }

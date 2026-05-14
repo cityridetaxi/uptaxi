@@ -314,6 +314,41 @@
     <script>
         let currentStep = 1;
         let isEmailVerified = true;
+        const REG_KEY = 'cityride_driver_reg_draft';
+
+        function setupPersistence() {
+            const form = document.getElementById('driver-reg-form');
+            const saved = localStorage.getItem(REG_KEY);
+            
+            if (saved) {
+                const data = JSON.parse(saved);
+                Object.keys(data).forEach(name => {
+                    const el = form.querySelector(`[name="${name}"]`);
+                    if (el && el.type !== 'file') {
+                        el.value = data[name];
+                    }
+                });
+                if (data._step) {
+                    const targetStep = parseInt(data._step);
+                    for (let i = 1; i < targetStep; i++) {
+                        changeStep(1, true); // Bypass validation when loading
+                    }
+                }
+            }
+
+            form.addEventListener('input', () => {
+                const data = JSON.parse(localStorage.getItem(REG_KEY) || '{}');
+                form.querySelectorAll('input, select').forEach(input => {
+                    if (input.name && input.type !== 'file') {
+                        data[input.name] = input.value;
+                    }
+                });
+                data._step = currentStep;
+                localStorage.setItem(REG_KEY, JSON.stringify(data));
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', setupPersistence);
 
 
 
@@ -324,9 +359,9 @@
             return password.length >= minLength && hasNumber && hasSymbol;
         }
 
-        function changeStep(delta) {
+        function changeStep(delta, skipValidation = false) {
             // Validation before moving forward
-            if (delta > 0) {
+            if (delta > 0 && !skipValidation) {
                 if (currentStep === 1) {
                     const pass = document.querySelector('input[name="password"]').value;
                     if (!isPasswordStrong(pass)) {
@@ -360,6 +395,11 @@
             // Show new
             document.getElementById(`step-${currentStep}`).classList.add('active');
             document.getElementById(`step-i-${currentStep}`).classList.add('active');
+
+            // Update button visibility and persistence
+            const data = JSON.parse(localStorage.getItem(REG_KEY) || '{}');
+            data._step = currentStep;
+            localStorage.setItem(REG_KEY, JSON.stringify(data));
 
             // Update buttons
             document.getElementById('prev-btn').style.display = currentStep > 1 ? 'block' : 'none';
@@ -407,6 +447,7 @@
 
                 if (res.ok) {
                     alert('APPLICATION TRANSMITTED!\nYour documents have been received by Ground Control. We will notify you via email once your identity is authorized.');
+                    localStorage.removeItem(REG_KEY);
                     window.location.href = '/driver-login';
                 } else {
                     alert('System Error: ' + result.error);
