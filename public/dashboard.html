@@ -238,35 +238,52 @@
                 padding: 100px 0 50px;
             }
 
-            .dashboard-header {
-                flex-direction: column;
-                text-align: center;
-                gap: 2rem;
-                margin-bottom: 3rem;
-            }
-
             .dashboard-header h1 {
                 font-size: 2rem;
             }
 
+            .stats-grid {
+                grid-template-columns: 1fr !important;
+                gap: 1.5rem !important;
+            }
+
             .history-card {
-                padding: 1.5rem;
+                padding: 1.5rem !important;
+            }
+
+            /* Responsive Table */
+            .rides-table thead {
+                display: none;
+            }
+            .rides-table, .rides-table tbody, .rides-table tr, .rides-table td {
+                display: block;
+                width: 100%;
+            }
+            .rides-table tr {
+                margin-bottom: 1.5rem;
+                background: white;
+                border: 1px solid var(--accents);
                 border-radius: 16px;
-            }
-
-            #rides-list {
-                overflow-x: auto;
-                -webkit-overflow-scrolling: touch;
-            }
-
-            .rides-table {
-                min-width: 600px;
-            }
-
-            .rides-table th,
-            .rides-table td {
                 padding: 1rem;
-                font-size: 0.85rem;
+            }
+            .rides-table td {
+                padding: 0.75rem 0 !important;
+                display: flex;
+                justify-content: space-between;
+                align-items: center;
+                text-align: right;
+                border-bottom: 1px solid rgba(0,0,0,0.02);
+            }
+            .rides-table td:last-child {
+                border-bottom: none;
+                margin-top: 0.5rem;
+            }
+            .rides-table td::before {
+                content: attr(data-label);
+                font-weight: 800;
+                text-transform: uppercase;
+                font-size: 0.65rem;
+                color: #999;
             }
 
             .support-grid {
@@ -344,9 +361,8 @@
                 <button class="btn btn-primary" onclick="window.location.href='/'">Book New Ride</button>
             </div>
 
-            <!-- CityRide Stats Bar -->
-            <div id="cityride-stats"
-                style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1%; margin-bottom: 4rem;">
+            <!-- Stats Ribbon -->
+            <div class="stats-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem; margin-bottom: 3rem;">
                 <div class="history-card" style="margin-bottom: 0; padding: 20px; text-align: center;">
                     <div
                         style="font-size: 0.8rem; text-transform: uppercase; color: var(--text-muted); font-weight: 700; letter-spacing: 1px;">
@@ -485,7 +501,16 @@
 
             try {
                 const res = await fetch(`${API_BASE_URL}/api/user/bookings/${user.id}`);
+                if (!res.ok) {
+                    const errData = await res.json();
+                    throw new Error(errData.error || 'Failed to fetch bookings');
+                }
                 const rides = await res.json();
+
+                if (!Array.isArray(rides)) {
+                    console.error('Expected array for rides, got:', rides);
+                    return;
+                }
 
                 // Delta Tracking for Status Changes
                 if (initialLoadDone) {
@@ -623,21 +648,21 @@
                     }[ride.trip_type] || 'One Way Trip';
 
                     row.innerHTML = `
-                        <td>${idText}</td>
-                        <td>
+                        <td data-label="ID">${idText}</td>
+                        <td data-label="Trip Details">
                             <div style="font-weight:800; font-size:0.7rem; color:#666; text-transform:uppercase; margin-bottom:0.3rem;">${tripTypeName} • ${ride.distance || '0 KM'}</div>
                             <div style="font-weight:600">${ride.pickup_loc}</div>
                             <div style="font-size:0.8rem; color:var(--text-muted)">to ${ride.drop_loc}</div>
                             <div style="margin-top:0.5rem">${driverDetails}</div>
                         </td>
-                        <td>
+                        <td data-label="Date & Time">
                             <div>${new Date(ride.pickup_date).toLocaleDateString()}</div>
                             <div style="font-size:0.8rem">${ride.pickup_time}</div>
                         </td>
-                        <td>${ride.vehicle_type.toUpperCase()}</td>
-                        <td style="font-weight:700">${ride.fare}</td>
-                        <td><span class="status-pill status-${ride.status}">${ride.status}</span></td>
-                        <td>${canCancel ? `<button class="btn-cancel-ride" onclick="cancelRide(${ride.id}, ${user.id})">Cancel</button>` : '<span style="color:#ccc;font-size:0.8rem;"></span>'}</td>
+                        <td data-label="Vehicle">${ride.vehicle_type.toUpperCase()}</td>
+                        <td data-label="Fare" style="font-weight:700">${ride.fare}</td>
+                        <td data-label="Status"><span class="status-pill status-${ride.status}">${ride.status}</span></td>
+                        <td data-label="Action">${canCancel ? `<button class="btn-cancel-ride" onclick="cancelRide(${ride.id}, ${user.id})">Cancel</button>` : '<span style="color:#ccc;font-size:0.8rem;"></span>'}</td>
                     `;
                     body.appendChild(row);
                 });

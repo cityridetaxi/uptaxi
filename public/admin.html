@@ -1038,6 +1038,30 @@
                     </tbody>
                 </table>
             </div>
+
+            <div class="stage-header" style="margin-top: 4rem;">
+                <div>
+                    <h1>Peak Time <span class="text-accent">Surcharge Rules</span></h1>
+                    <p>Apply percentage-based increases for specific time windows.</p>
+                </div>
+                <button class="btn btn-primary" onclick="openPeakRuleModal()" style="padding: 0.8rem 1.5rem; background: #e65100;">+ New Peak Rule</button>
+            </div>
+
+            <div class="data-table-container">
+                <table class="cityride-table">
+                    <thead>
+                        <tr>
+                            <th>Start Time</th>
+                            <th>End Time</th>
+                            <th>Surcharge (%)</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="peak-rules-table-body">
+                        <!-- Loaded via JS -->
+                    </tbody>
+                </table>
+            </div>
         </div>
             
 
@@ -1072,6 +1096,7 @@
                     <div class="input-group">
                         <label>Vehicle Type</label>
                         <select id="edit-d-type" required style="width: 100%; padding: 0.85rem 1rem; border-radius: 10px; border: 1px solid rgba(0,0,0,0.1); font-family: inherit; font-size: 1rem;">
+                            <option value="hatchback">Hatchback</option>
                             <option value="sedan">Sedan</option>
                             <option value="suv">SUV</option>
                             <option value="bike">Bike</option>
@@ -1207,6 +1232,7 @@
             try {
                 if (tabId === 'overview') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/stats`);
+                    if (!res.ok) throw new Error('Stats Fetch Failed');
                     const stats = await res.json();
                     
                     const rev = document.getElementById('stat-revenue');
@@ -1214,38 +1240,76 @@
                     const dri = document.getElementById('stat-drivers');
                     const usr = document.getElementById('stat-users');
                     
-                    if (rev) rev.textContent = `₹${stats.revenue.toLocaleString()}`;
-                    if (act) act.textContent = stats.activeBookings;
-                    if (dri) dri.textContent = stats.totalDrivers;
-                    if (usr) usr.textContent = stats.totalUsers;
+                    if (rev) rev.textContent = stats && stats.revenue !== undefined ? `₹${stats.revenue.toLocaleString()}` : '₹0';
+                    if (act) act.textContent = stats ? stats.activeBookings : '0';
+                    if (dri) dri.textContent = stats ? stats.totalDrivers : '0';
+                    if (usr) usr.textContent = stats ? stats.totalUsers : '0';
 
                     const resB = await fetch(`${API_BASE_URL}/api/admin/bookings`);
+                    if (!resB.ok) throw new Error('Bookings Fetch Failed');
                     const bookings = await resB.json();
                     if (!body) return;
                     body.innerHTML = '';
-                    bookings.slice(0, 5).forEach(b => {
-                        body.innerHTML += `
-                            <tr>
-                                <td data-label="Booking ID">#B${b.id}</td>
-                                <td data-label="Customer">
-                                    <strong>${b.customer_name}</strong>
-                                    ${b.vendor_id ? `<span style="font-size:0.6rem; color:#1565c0; font-weight:800; margin-left:5px;">(VENDOR)</span>` : ''}<br>
-                                    <a href="tel:${b.customer_phone}" style="font-size:0.8rem; color:var(--primary-red); text-decoration:none; font-weight:700;">${b.customer_phone || ''}</a>
-                                </td>
-                                <td data-label="Route" style="padding: 1.5rem; text-align: left;">
-                                    <span style="font-size:0.65rem; font-weight:800; color:#B71C1C; text-transform:uppercase; background:#fbe9e7; padding:2px 6px; border-radius:4px; margin-bottom:0.3rem; display:inline-block;">${(b.trip_type === 'round' ? 'Round Trip' : (b.trip_type === 'rental' ? 'Local Rental' : (b.trip_type || 'One Way').replace('_', ' ')))}</span><br>
-                                    ${b.pickup_loc} → ${b.drop_loc}
-                                </td>
-                                <td data-label="Status"><span class="status-tag status-${b.status}">${b.status}</span></td>
-                                <td data-label="Actions">${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Abort</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
-                            </tr>
-                        `;
-                    });
+                    if (Array.isArray(bookings)) {
+                        bookings.slice(0, 5).forEach(b => {
+                            body.innerHTML += `
+                                <tr>
+                                    <td data-label="Booking ID">#B${b.id}</td>
+                                    <td data-label="Customer">
+                                        <strong>${b.customer_name}</strong>
+                                        ${b.vendor_id ? `<span style="font-size:0.6rem; color:#1565c0; font-weight:800; margin-left:5px;">(VENDOR)</span>` : ''}<br>
+                                        <a href="tel:${b.customer_phone}" style="font-size:0.8rem; color:var(--primary-red); text-decoration:none; font-weight:700;">${b.customer_phone || ''}</a>
+                                    </td>
+                                    <td data-label="Route" style="padding: 1.5rem; text-align: left;">
+                                        <span style="font-size:0.65rem; font-weight:800; color:#B71C1C; text-transform:uppercase; background:#fbe9e7; padding:2px 6px; border-radius:4px; margin-bottom:0.3rem; display:inline-block;">${(b.trip_type === 'round' ? 'Round Trip' : (b.trip_type === 'rental' ? 'Local Rental' : (b.trip_type || 'One Way').replace('_', ' ')))}</span><br>
+                                        ${b.pickup_loc} → ${b.drop_loc}
+                                    </td>
+                                    <td data-label="Status"><span class="status-tag status-${b.status}">${b.status}</span></td>
+                                    <td data-label="Actions">${['pending', 'assigned'].includes(b.status) ? `<button class="action-btn" onclick="cancelBooking(${b.id})">Abort</button>` : '<span style="color:#ccc; font-size:0.8rem;">—</span>'}</td>
+                                </tr>
+                            `;
+                        });
+                    } else {
+                        body.innerHTML = '<tr><td colspan="5" style="text-align:center; color:#888;">No recent missions found or platform error.</td></tr>';
+                    }
+                } else if (tabId === 'tariffs') {
+                    const resT = await fetch(`${API_BASE_URL}/api/tariffs`);
+                    if (!resT.ok) throw new Error('Tariffs Fetch Failed');
+                    const tariffs = await resT.json();
+                    if (body) {
+                        body.innerHTML = '';
+                        tariffs.forEach(t => {
+                            const config = typeof t.config === 'string' ? JSON.parse(t.config) : t.config;
+                            let rateStr = '';
+                            if (t.category === 'rental') {
+                                rateStr = 'Package-based';
+                            } else {
+                                rateStr = `Base: ₹${config.base}, Rate: ₹${config.perKm}/km`;
+                            }
+                            body.innerHTML += `
+                                <tr>
+                                    <td data-label="Vehicle">${t.vehicle_type.toUpperCase()}</td>
+                                    <td data-label="Category">${t.category.toUpperCase()}</td>
+                                    <td data-label="Current Rates">${rateStr}</td>
+                                    <td data-label="Last Updated">${new Date(t.updated_at).toLocaleDateString()}</td>
+                                    <td data-label="Actions">
+                                        <button class="action-btn" onclick='openTariffModal(${JSON.stringify(t)})'>Configure</button>
+                                    </td>
+                                </tr>
+                            `;
+                        });
+                    }
+                    loadPeakRules();
                 } else if (tabId === 'bookings') {
                     const res = await fetch(`${API_BASE_URL}/api/admin/bookings`);
                     const bookings = await res.json();
                     if (!body) return;
                     body.innerHTML = '';
+
+                    if (!Array.isArray(bookings)) {
+                        body.innerHTML = '<tr><td colspan="8" style="text-align:center; color:#888;">Mission Log currently unavailable.</td></tr>';
+                        return;
+                    }
                     
                     // Handle Abort Requests Section Visibility
                     const aborts = bookings.filter(b => b.status === 'cancel_requested');
@@ -2020,18 +2084,7 @@
             }
         }
 
-        // Initial Load
-        loadTabData('overview');
-
-        // Central Command Live Radar Poll (5 seconds)
-        let _activeTab = 'overview';
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', () => {
-                const match = item.getAttribute('onclick')?.match(/switchTab\('(\w+)'/);
-                if (match) _activeTab = match[1];
-            });
-        });
-        setInterval(() => { loadTabData(_activeTab); }, 5000);
+        // Consolidation: Script continues after the HTML modals
     </script>
     <!-- Application Document Modal -->
     <div id="doc-modal" class="map-modal" style="display: none;">
@@ -2170,8 +2223,152 @@
                 }
             } catch (err) { alert('Update failed'); }
         });
-    </script>
 
+        // --- PEAK RULES MANAGEMENT ---
+        let _peakRulesData = [];
+
+        async function loadPeakRules() {
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/peak-rules`);
+                const rules = await res.json();
+                _peakRulesData = rules; // Store globally
+                const body = document.getElementById('peak-rules-table-body');
+                if (!body) return;
+                body.innerHTML = '';
+                rules.forEach(r => {
+                    body.innerHTML += `
+                        <tr>
+                            <td data-label="Start Time">${r.start_time}</td>
+                            <td data-label="End Time">${r.end_time}</td>
+                            <td data-label="Surcharge"><strong style="color:#e65100">+${r.surcharge_percentage}%</strong></td>
+                            <td data-label="Actions">
+                                <button class="action-btn" style="color:#1565c0" onclick="openPeakRuleModal(${r.id})">Edit</button>
+                                <button class="action-btn" style="color:#d32f2f; margin-left: 8px;" onclick="deletePeakRule(${r.id})">Remove</button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            } catch (err) { console.error('Failed to load peak rules', err); }
+        }
+
+        function openPeakRuleModal(ruleId = null) {
+            let rule = null;
+            if (ruleId) {
+                // If it's an event object (from + New Peak Rule button without args), it won't match a number
+                if (typeof ruleId === 'number' || typeof ruleId === 'string') {
+                    rule = _peakRulesData.find(r => r.id == ruleId);
+                }
+            }
+
+            if (rule) {
+                document.getElementById('p-id').value = rule.id;
+                document.getElementById('p-start').value = rule.start_time ? rule.start_time.substring(0, 5) : '';
+                document.getElementById('p-end').value = rule.end_time ? rule.end_time.substring(0, 5) : '';
+                document.getElementById('p-percent').value = rule.surcharge_percentage;
+                document.querySelector('#peak-rule-modal h3').textContent = 'Edit Peak Rule';
+                document.querySelector('#peak-rule-modal .btn').textContent = 'Update Rule';
+            } else {
+                document.getElementById('p-id').value = '';
+                document.getElementById('p-start').value = '';
+                document.getElementById('p-end').value = '';
+                document.getElementById('p-percent').value = '';
+                document.querySelector('#peak-rule-modal h3').textContent = 'Add Peak Rule';
+                document.querySelector('#peak-rule-modal .btn').textContent = 'Add Rule';
+            }
+            document.getElementById('peak-rule-modal').style.display = 'flex';
+        }
+
+        function closePeakRuleModal() {
+            document.getElementById('peak-rule-modal').style.display = 'none';
+        }
+
+        async function savePeakRule(e) {
+            e.preventDefault();
+            const id = document.getElementById('p-id').value;
+            const data = {
+                start_time: document.getElementById('p-start').value,
+                end_time: document.getElementById('p-end').value,
+                surcharge_percentage: document.getElementById('p-percent').value
+            };
+
+            try {
+                const endpoint = id ? `${API_BASE_URL}/api/admin/peak-rules/update` : `${API_BASE_URL}/api/admin/peak-rules/add`;
+                if (id) data.id = id;
+
+                const res = await fetch(endpoint, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                if (res.ok) {
+                    alert(id ? 'Peak rule updated!' : 'Peak rule added!');
+                    closePeakRuleModal();
+                    loadPeakRules();
+                } else {
+                    const err = await res.json();
+                    alert(err.error || 'Failed to save rule');
+                }
+            } catch (err) { alert('Failed to save rule'); }
+        }
+
+        async function deletePeakRule(id) {
+            if (!confirm('Remove this peak surcharge rule?')) return;
+            try {
+                const res = await fetch(`${API_BASE_URL}/api/admin/peak-rules/delete`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id })
+                });
+                if (res.ok) loadPeakRules();
+            } catch (err) { alert('Failed to delete rule'); }
+        }
+
+        // --- INITIALIZATION ---
+        let _activeTab = 'overview';
+        
+        // Handle Sidebar Tab Switching
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const match = item.getAttribute('onclick')?.match(/switchTab\('(\w+)'/);
+                if (match) _activeTab = match[1];
+            });
+        });
+
+        // Initial Load
+        loadTabData('overview');
+        
+        // Central Command Live Radar Poll (5 seconds)
+        setInterval(() => { loadTabData(_activeTab); }, 5000);
+    </script>
+    <!-- Peak Rule Modal -->
+    <div id="peak-rule-modal" class="map-modal" style="display: none;">
+        <div class="map-modal-content" style="max-width: 400px; width: 95%;">
+            <div class="map-header" style="background: #e65100;">
+                <h3>Add Peak Rule</h3>
+                <button class="close-map" onclick="closePeakRuleModal()">×</button>
+            </div>
+            <div style="padding: 2rem;">
+                <form onsubmit="savePeakRule(event)">
+                    <input type="hidden" id="p-id">
+                    <div class="input-group">
+                        <label>Start Time</label>
+                        <input type="time" id="p-start" required>
+                    </div>
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label>End Time</label>
+                        <input type="time" id="p-end" required>
+                    </div>
+                    <div class="input-group" style="margin-top: 1rem;">
+                        <label>Surcharge Percentage (%)</label>
+                        <input type="number" id="p-percent" placeholder="e.g. 25" required>
+                    </div>
+                    <div style="margin-top: 2rem;">
+                        <button type="submit" class="btn btn-primary" style="width: 100%; background: #e65100;">Add Rule</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
     <script src="alert.js"></script>
     <script>
         window.addEventListener('load', () => {
@@ -2185,5 +2382,4 @@
         });
     </script>
 </body>
-
 </html>

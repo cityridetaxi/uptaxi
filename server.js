@@ -119,7 +119,9 @@ async function initDB() {
         waitForConnections: true,
         connectionLimit: 10,
         queueLimit: 0,
-        charset: 'UTF8MB4_UNICODE_CI'
+        charset: 'UTF8MB4_UNICODE_CI',
+        enableKeepAlive: true,
+        keepAliveInitialDelay: 10000
     };
 
     try {
@@ -137,12 +139,22 @@ async function initDB() {
 
         // 2. Initialize Shared Pool
         db = mysql.createPool(dbConfig);
+
+        // Pool Error Handling
+        db.on('error', (err) => {
+            console.error('Database Pool Error:', err);
+            if (err.code === 'PROTOCOL_CONNECTION_LOST' || err.code === 'ECONNRESET') {
+                console.log('Re-initializing database pool...');
+                db = mysql.createPool(dbConfig);
+            }
+        });
+
         console.log('Database Pool initialized.');
 
         // 3. Create Tables
         // Passengers
         await db.query(`
-            CREATE TABLE IF NOT EXISTS passengers (
+            CREATE TABLE IF NOT EXISTS taxi_passengers (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100),
                 email VARCHAR(100),
@@ -157,12 +169,12 @@ async function initDB() {
 
         // Migration: Ensure is_blocked exists
         try {
-            await db.query('ALTER TABLE passengers ADD COLUMN is_blocked TINYINT DEFAULT 0');
+            await db.query('ALTER TABLE taxi_passengers ADD COLUMN is_blocked TINYINT DEFAULT 0');
         } catch (e) { /* existing */ }
 
-        // Drivers
+        // taxi_drivers
         await db.query(`
-            CREATE TABLE IF NOT EXISTS drivers (
+            CREATE TABLE IF NOT EXISTS taxi_drivers (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100),
                 email VARCHAR(100) UNIQUE,
@@ -191,20 +203,20 @@ async function initDB() {
         `);
 
         // Migration: Ensure columns exist
-        try { await db.query('ALTER TABLE drivers ADD COLUMN is_blocked TINYINT DEFAULT 0'); } catch (e) {}
-        try { await db.query('ALTER TABLE drivers ADD COLUMN approval_status VARCHAR(20) DEFAULT "approved"'); } catch (e) {}
-        try { await db.query('ALTER TABLE drivers ADD UNIQUE (phone)'); } catch (e) {}
-        try { await db.query('ALTER TABLE driver_applications ADD UNIQUE (phone)'); } catch (e) {}
+        try { await db.query('ALTER TABLE taxi_drivers ADD COLUMN is_blocked TINYINT DEFAULT 0'); } catch (e) {}
+        try { await db.query('ALTER TABLE taxi_drivers ADD COLUMN approval_status VARCHAR(20) DEFAULT "approved"'); } catch (e) {}
+        try { await db.query('ALTER TABLE taxi_drivers ADD UNIQUE (phone)'); } catch (e) {}
+        try { await db.query('ALTER TABLE taxi_driver_applications ADD UNIQUE (phone)'); } catch (e) {}
         
         // Add Document Columns to Drivers if missing
         const docCols = ['dl_front', 'dl_back', 'pvc', 'aadhar_front', 'aadhar_back', 'rc_book', 'insurance', 'pollution', 'permit'];
         for (const col of docCols) {
-            try { await db.query(`ALTER TABLE drivers ADD COLUMN ${col} VARCHAR(255)`); } catch (e) {}
+            try { await db.query(`ALTER TABLE taxi_drivers ADD COLUMN ${col} VARCHAR(255)`); } catch (e) {}
         }
 
-        // Driver Applications (New Registrations)
+        // taxi_driver_applications (New Registrations)
         await db.query(`
-            CREATE TABLE IF NOT EXISTS driver_applications (
+            CREATE TABLE IF NOT EXISTS taxi_driver_applications (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100),
                 email VARCHAR(100) UNIQUE,
@@ -233,9 +245,9 @@ async function initDB() {
             )
         `);
 
-        // Admins
+        // taxi_admins
         await db.query(`
-            CREATE TABLE IF NOT EXISTS admins (
+            CREATE TABLE IF NOT EXISTS taxi_admins (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 name VARCHAR(100),
                 email VARCHAR(100) UNIQUE,
@@ -244,9 +256,19 @@ async function initDB() {
             )
         `);
 
-        // Vendors (Partners/Dealers)
+        // Seed default admin if empty
+        const [adminRows] = await db.query('SELECT COUNT(*) as cnt FROM taxi_admins');
+        if (adminRows[0].cnt === 0) {
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash('adminpass', salt);
+            await db.query('INSERT INTO taxi_admins (name, email, password) VALUES (?, ?, ?)', 
+                ['CityRide Admin', 'admin@cityridetaxi', hashedPassword]);
+            console.log('Default admin seeded.');
+        }
+
+        // taxi_vendors (Partners/Dealers)
         await db.query(`
-            CREATE TABLE IF NOT EXISTS vendors (
+            CREATE TABLE IF NOT EXISTS taxi_vendors (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 vendor_id VARCHAR(50) UNIQUE,
                 name VARCHAR(100),
@@ -259,9 +281,9 @@ async function initDB() {
             )
         `);
 
-        // Bookings
+        // taxi_bookings
         await db.query(`
-            CREATE TABLE IF NOT EXISTS bookings (
+            CREATE TABLE IF NOT EXISTS taxi_bookings (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 user_id INT,
                 pickup_loc TEXT,
@@ -281,51 +303,78 @@ async function initDB() {
         `);
 
         // Migration: Ensure coords exist
-        try { await db.query('ALTER TABLE bookings ADD COLUMN pickup_coords VARCHAR(100) AFTER pickup_loc'); } catch(e){}
-        try { await db.query('ALTER TABLE bookings ADD COLUMN drop_coords VARCHAR(100) AFTER drop_loc'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN pickup_coords VARCHAR(100) AFTER pickup_loc'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN drop_coords VARCHAR(100) AFTER drop_loc'); } catch(e){}
 
         // Migration: Ensure trip_type exists
         try {
-            await db.query('ALTER TABLE bookings ADD COLUMN trip_type VARCHAR(50) AFTER vehicle_type');
+            await db.query('ALTER TABLE taxi_bookings ADD COLUMN trip_type VARCHAR(50) AFTER vehicle_type');
         } catch (e) { /* already exists */ }
 
         // Migration: Ensure cancel_reason exists
         try {
-            await db.query('ALTER TABLE bookings ADD COLUMN cancel_reason TEXT AFTER status');
+            await db.query('ALTER TABLE taxi_bookings ADD COLUMN cancel_reason TEXT AFTER status');
         } catch (e) { /* already exists */ }
 
         // Migration: Ensure distance exists
-        try { await db.query('ALTER TABLE bookings ADD COLUMN distance VARCHAR(50)'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN distance VARCHAR(50)'); } catch(e){}
         
-        // Migration: Ensure journey_otp exists
-        try { await db.query('ALTER TABLE bookings ADD COLUMN journey_otp VARCHAR(10)'); } catch(e){}
+        // Migration: Ensure core columns exist (Safe recovery)
+        try { 
+            await db.query('ALTER TABLE taxi_bookings ADD COLUMN status VARCHAR(20) DEFAULT "pending" AFTER fare'); 
+            console.log('✅ Migration: status column added to bookings.');
+        } catch(e){
+            if (!e.message.includes('Duplicate column name')) console.error('❌ Migration Error (status):', e.message);
+        }
+        
+        try { 
+            await db.query('ALTER TABLE taxi_bookings ADD COLUMN journey_otp VARCHAR(10) AFTER status'); 
+            console.log('✅ Migration: journey_otp column added to bookings.');
+        } catch(e){
+            if (!e.message.includes('Duplicate column name')) console.error('❌ Migration Error (journey_otp):', e.message);
+        }
+
+        try { 
+            await db.query('ALTER TABLE taxi_bookings ADD COLUMN vendor_id INT NULL'); 
+            console.log('✅ Migration: vendor_id column added to bookings.');
+        } catch(e){
+            if (!e.message.includes('Duplicate column name')) console.error('❌ Migration Error (vendor_id):', e.message);
+        }
+
+        try { 
+            await db.query('ALTER TABLE taxi_bookings ADD COLUMN vendor_markup DECIMAL(10,2) DEFAULT 0'); 
+            console.log('✅ Migration: vendor_markup column added to bookings.');
+        } catch(e){
+            if (!e.message.includes('Duplicate column name')) console.error('❌ Migration Error (vendor_markup):', e.message);
+        }
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN journey_otp VARCHAR(10)'); } catch(e){}
 
         // Migration: Odometer and Timer for Rental
-        try { await db.query('ALTER TABLE bookings ADD COLUMN start_odometer INT NULL'); } catch(e){}
-        try { await db.query('ALTER TABLE bookings ADD COLUMN end_odometer INT NULL'); } catch(e){}
-        try { await db.query('ALTER TABLE bookings ADD COLUMN journey_start_time DATETIME NULL'); } catch(e){}
-        try { await db.query('ALTER TABLE bookings ADD COLUMN journey_end_time DATETIME NULL'); } catch(e){}
-        try { await db.query('ALTER TABLE bookings ADD COLUMN rental_package VARCHAR(50) NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN start_odometer INT NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN end_odometer INT NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN journey_start_time DATETIME NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN journey_end_time DATETIME NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN rental_package VARCHAR(50) NULL'); } catch(e){}
         // Ensure status column can handle 'finished'
-        try { await db.query("ALTER TABLE bookings MODIFY COLUMN status ENUM('pending', 'assigned', 'ongoing', 'finished', 'completed', 'cancelled', 'cancel_requested') DEFAULT 'pending'"); } catch(e){}
+        try { await db.query("ALTER TABLE taxi_bookings MODIFY COLUMN status ENUM('pending', 'assigned', 'ongoing', 'finished', 'completed', 'cancelled', 'cancel_requested') DEFAULT 'pending'"); } catch(e){}
 
         // Migration: Vendor Support
-        try { await db.query('ALTER TABLE bookings ADD COLUMN vendor_id INT NULL'); } catch(e){}
-        try { await db.query('ALTER TABLE bookings ADD COLUMN vendor_markup DECIMAL(10,2) DEFAULT 0'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN vendor_id INT NULL'); } catch(e){}
+        try { await db.query('ALTER TABLE taxi_bookings ADD COLUMN vendor_markup DECIMAL(10,2) DEFAULT 0'); } catch(e){}
 
         // Recovery: Generate OTPs for legacy rides that don't have one
         try {
-            const [missing] = await db.query('SELECT id FROM bookings WHERE journey_otp IS NULL OR journey_otp = ""');
+            const [missing] = await db.query('SELECT id FROM taxi_bookings WHERE journey_otp IS NULL OR journey_otp = ""');
             for (const ride of missing) {
                 const newOtp = Math.floor(1000 + Math.random() * 9000).toString();
-                await db.query('UPDATE bookings SET journey_otp = ? WHERE id = ?', [newOtp, ride.id]);
+                await db.query('UPDATE taxi_bookings SET journey_otp = ? WHERE id = ?', [newOtp, ride.id]);
                 console.log(`[RECOVERY] Generated legacy OTP [${newOtp}] for Ride #B${ride.id}`);
             }
         } catch (e) { console.error('Recovery script failed:', e.message); }
 
         // Abort Rejections Table
         await db.query(`
-            CREATE TABLE IF NOT EXISTS abort_rejections (
+            CREATE TABLE IF NOT EXISTS taxi_abort_rejections (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 booking_id INT,
                 driver_id INT,
@@ -337,7 +386,7 @@ async function initDB() {
 
         // OTPs Table (For Email Verification)
         await db.query(`
-            CREATE TABLE IF NOT EXISTS otps (
+            CREATE TABLE IF NOT EXISTS taxi_otps (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 email VARCHAR(100),
                 otp VARCHAR(10),
@@ -347,7 +396,7 @@ async function initDB() {
 
         // Tariffs
         await db.query(`
-            CREATE TABLE IF NOT EXISTS tariffs (
+            CREATE TABLE IF NOT EXISTS taxi_tariffs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 vehicle_type VARCHAR(50),
                 category VARCHAR(50),
@@ -356,81 +405,137 @@ async function initDB() {
             )
         `);
 
+        // Peak Rules Table
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS taxi_peak_rules (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                start_time TIME,
+                end_time TIME,
+                surcharge_percentage DECIMAL(5,2),
+                is_active TINYINT DEFAULT 1
+            )
+        `);
+
+        // Insert default peak rules if empty
+        const [peakRows] = await db.query('SELECT COUNT(*) as cnt FROM taxi_peak_rules');
+        if (peakRows[0].cnt === 0) {
+            await db.query('INSERT INTO taxi_peak_rules (start_time, end_time, surcharge_percentage) VALUES ("08:00:00", "11:00:00", 25.00)');
+            await db.query('INSERT INTO taxi_peak_rules (start_time, end_time, surcharge_percentage) VALUES ("16:00:00", "21:00:00", 25.00)');
+            console.log('Default peak rules initialized.');
+        }
+
         // Insert default tariffs if empty
         try {
-            const [tariffRows] = await db.query('SELECT COUNT(*) as cnt FROM tariffs');
-            if (tariffRows[0].cnt === 0) {
-                const defaultTariffs = [
-                    {
-                        vehicle_type: 'bike',
-                        category: 'local',
-                        config: JSON.stringify({ base: 0, perKm: 10, minKm: 5 })
-                    },
-                    {
-                        vehicle_type: 'bike',
-                        category: 'oneway',
-                        config: JSON.stringify({ base: 0, perKm: 10, minKm: 5, convenience: 0 })
-                    },
-                    {
-                        vehicle_type: 'sedan',
-                        category: 'local',
-                        config: JSON.stringify({ base: 200, perKm: 25, minKm: 0 })
-                    },
-                    {
-                        vehicle_type: 'sedan',
-                        category: 'oneway',
-                        config: JSON.stringify({ base: 0, perKm: 13, minKm: 130 })
-                    },
-                    {
-                        vehicle_type: 'sedan',
-                        category: 'round',
-                        config: JSON.stringify({ base: 0, perKm: 12, minKmPerDay: 250 })
-                    },
-                    {
-                        vehicle_type: 'sedan',
-                        category: 'rental',
-                        config: JSON.stringify({ 
-                            '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
-                            '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
-                            '8-80': { base: 2100, extraKm: 16, extraHour: 120 }, 
-                            '12-120': { base: 2800, extraKm: 15, extraHour: 120 } 
-                        })
-                    },
-                    {
-                        vehicle_type: 'suv',
-                        category: 'local',
-                        config: JSON.stringify({ base: 300, perKm: 35, minKm: 0 })
-                    },
-                    {
-                        vehicle_type: 'suv',
-                        category: 'oneway',
-                        config: JSON.stringify({ base: 0, perKm: 19, minKm: 130 })
-                    },
-                    {
-                        vehicle_type: 'suv',
-                        category: 'round',
-                        config: JSON.stringify({ base: 0, perKm: 18, minKmPerDay: 250 })
-                    },
-                    {
-                        vehicle_type: 'suv',
-                        category: 'rental',
-                        config: JSON.stringify({ 
-                            '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
-                            '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
-                            '8-80': { base: 3100, extraKm: 22, extraHour: 200 }, 
-                            '12-120': { base: 4200, extraKm: 20, extraHour: 200 } 
-                        })
-                    }
-                ];
+            const [tariffRows] = await db.query('SELECT COUNT(*) as cnt FROM taxi_tariffs');
+            
+            const defaultTariffs = [
+                {
+                    vehicle_type: 'bike',
+                    category: 'local',
+                    config: JSON.stringify({ base: 0, perKm: 10, minKm: 5 })
+                },
+                {
+                    vehicle_type: 'bike',
+                    category: 'oneway',
+                    config: JSON.stringify({ base: 0, perKm: 10, minKm: 5, convenience: 0 })
+                },
+                {
+                    vehicle_type: 'sedan',
+                    category: 'local',
+                    config: JSON.stringify({ base: 200, perKm: 25, minKm: 0 })
+                },
+                {
+                    vehicle_type: 'sedan',
+                    category: 'oneway',
+                    config: JSON.stringify({ base: 0, perKm: 13, minKm: 130 })
+                },
+                {
+                    vehicle_type: 'sedan',
+                    category: 'round',
+                    config: JSON.stringify({ base: 0, perKm: 12, minKmPerDay: 250 })
+                },
+                {
+                    vehicle_type: 'sedan',
+                    category: 'rental',
+                    config: JSON.stringify({ 
+                        '2-20': { base: 600, extraKm: 18, extraHour: 150 }, 
+                        '4-40': { base: 1100, extraKm: 18, extraHour: 150 }, 
+                        '8-80': { base: 2100, extraKm: 16, extraHour: 120 }, 
+                        '12-120': { base: 2800, extraKm: 15, extraHour: 120 } 
+                    })
+                },
+                {
+                    vehicle_type: 'suv',
+                    category: 'local',
+                    config: JSON.stringify({ base: 300, perKm: 35, minKm: 0 })
+                },
+                {
+                    vehicle_type: 'suv',
+                    category: 'oneway',
+                    config: JSON.stringify({ base: 0, perKm: 19, minKm: 130 })
+                },
+                {
+                    vehicle_type: 'suv',
+                    category: 'round',
+                    config: JSON.stringify({ base: 0, perKm: 18, minKmPerDay: 250 })
+                },
+                {
+                    vehicle_type: 'suv',
+                    category: 'rental',
+                    config: JSON.stringify({ 
+                        '2-20': { base: 900, extraKm: 25, extraHour: 250 }, 
+                        '4-40': { base: 1600, extraKm: 25, extraHour: 250 }, 
+                        '8-80': { base: 3100, extraKm: 22, extraHour: 200 }, 
+                        '12-120': { base: 4200, extraKm: 20, extraHour: 200 } 
+                    })
+                },
+                {
+                    vehicle_type: 'hatchback',
+                    category: 'local',
+                    config: JSON.stringify({ base: 150, perKm: 20, minKm: 0 })
+                },
+                {
+                    vehicle_type: 'hatchback',
+                    category: 'oneway',
+                    config: JSON.stringify({ base: 0, perKm: 11, minKm: 100 })
+                },
+                {
+                    vehicle_type: 'hatchback',
+                    category: 'round',
+                    config: JSON.stringify({ base: 0, perKm: 10, minKmPerDay: 200 })
+                },
+                {
+                    vehicle_type: 'hatchback',
+                    category: 'rental',
+                    config: JSON.stringify({ 
+                        '2-20': { base: 450, extraKm: 15, extraHour: 120 }, 
+                        '4-40': { base: 850, extraKm: 15, extraHour: 120 }, 
+                        '8-80': { base: 1600, extraKm: 14, extraHour: 100 }, 
+                        '12-120': { base: 2200, extraKm: 13, extraHour: 100 } 
+                    })
+                }
+            ];
 
+            // If table is empty, insert all
+            if (tariffRows[0].cnt === 0) {
                 for (const t of defaultTariffs) {
-                    await db.query('INSERT INTO tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
+                    await db.query('INSERT INTO taxi_tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
                 }
                 console.log('Default tariffs initialized.');
+            } else {
+                    // Check if hatchbacks specifically are missing (Migration)
+                    const [hatchRows] = await db.query('SELECT COUNT(*) as cnt FROM taxi_tariffs WHERE vehicle_type = "hatchback"');
+                    if (hatchRows[0].cnt === 0) {
+                        const hatchTariffs = defaultTariffs.filter(t => t.vehicle_type === 'hatchback');
+                        for (const t of hatchTariffs) {
+                            await db.query('INSERT INTO taxi_tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
+                        }
+                        console.log('✅ Migration: Hatchback tariffs added.');
+                    }
+                }
+            } catch (e) {
+                console.error('Tariff initialization failed:', e.message);
             }
-        } catch (e) {
-            console.error('Tariff initialization failed:', e.message);
-        }
 
         console.log('MySQL schema and default admin ensured.');
     } catch (err) {
@@ -442,7 +547,7 @@ async function initDB() {
 // Maintenance: Clean up old OTPs every hour
 cron.schedule('0 * * * *', async () => {
     if (db) {
-        await db.query('DELETE FROM otps WHERE expires_at < NOW()');
+        await db.query('DELETE FROM taxi_otps WHERE expires_at < NOW()');
         console.log('--- OTP CLEANUP COMPLETED ---');
     }
 });
@@ -472,9 +577,9 @@ async function sendDailyReport() {
             SELECT b.*, 
                    u.name as customer_name, u.phone as customer_phone, u.email as customer_email,
                    d.name as driver_name, d.phone as driver_phone, d.car_model, d.car_number
-            FROM bookings b 
+            FROM taxi_bookings b 
             LEFT JOIN passengers u ON b.user_id = u.id 
-            LEFT JOIN drivers d ON b.driver_id = d.id 
+            LEFT JOIN taxi_drivers d ON b.driver_id = d.id 
             WHERE b.created_at >= ?
         `, [todayStart]);
 
@@ -601,7 +706,36 @@ cron.schedule('59 23 * * *', () => {
     sendDailyReport();
 });
 
-startServer();
+// --- PEAK RULES API ---
+app.get('/api/peak-rules', async (req, res) => {
+    try {
+        const [rules] = await db.query('SELECT * FROM taxi_peak_rules WHERE is_active = 1');
+        res.json(rules);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch peak rules' });
+    }
+});
+
+app.post('/api/admin/peak-rules/add', async (req, res) => {
+    try {
+        const { start_time, end_time, surcharge_percentage } = req.body;
+        await db.query('INSERT INTO taxi_peak_rules (start_time, end_time, surcharge_percentage) VALUES (?, ?, ?)', [start_time, end_time, surcharge_percentage]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to add peak rule' });
+    }
+});
+
+app.post('/api/admin/peak-rules/delete', async (req, res) => {
+    try {
+        const { id } = req.body;
+        await db.query('DELETE FROM taxi_peak_rules WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete peak rule' });
+    }
+});
+
 
 // --- AUTHENTICATION ROUTES ---
 // 1. Send OTP (Email Verification Request)
@@ -613,8 +747,8 @@ app.post('/api/auth/send-otp', async (req, res) => {
         const otp = Math.floor(100000 + Math.random() * 900000).toString();
         const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-        await db.query('DELETE FROM otps WHERE email = ?', [email]);
-        await db.query('INSERT INTO otps (email, otp, expires_at) VALUES (?, ?, ?)', [email, otp, expiresAt]);
+        await db.query('DELETE FROM taxi_otps WHERE email = ?', [email]);
+        await db.query('INSERT INTO taxi_otps (email, otp, expires_at) VALUES (?, ?, ?)', [email, otp, expiresAt]);
 
         const subject = 'CityRide platform verification code';
         const html = `<div style="font-family: Arial, sans-serif; padding: 25px; border: 4px solid #1a1a1a; border-radius: 15px; max-width: 500px; text-align: center;">
@@ -641,7 +775,7 @@ app.post('/api/auth/register', async (req, res) => {
         const { name, email, password, phone, otp } = req.body;
         
         // 1. Validate OTP (DISABLED)
-        // const [otpRows] = await db.query('SELECT * FROM otps WHERE email = ? AND otp = ? AND expires_at > NOW()', [email, otp]);
+        // const [otpRows] = await db.query('SELECT * FROM taxi_otps WHERE email = ? AND otp = ? AND expires_at > NOW()', [email, otp]);
         // if (otpRows.length === 0) return res.status(400).json({ error: 'Invalid or expired OTP.' });
 
         // 2. Check for Existing Member
@@ -655,7 +789,7 @@ app.post('/api/auth/register', async (req, res) => {
         const [result] = await db.query(sql, [name, email, hashedPassword, phone]);
         
         // Cleanup OTP (DISABLED)
-        // await db.query('DELETE FROM otps WHERE email = ?', [email]);
+        // await db.query('DELETE FROM taxi_otps WHERE email = ?', [email]);
         
         res.json({ 
             success: true, 
@@ -707,10 +841,10 @@ app.post('/api/auth/login', async (req, res) => {
 app.post('/api/admin/login', async (req, res) => {
     try {
         const { email, password } = req.body;
-        const [admins] = await db.query('SELECT id, name, email, password FROM admins WHERE email = ?', [email]);
+        const [taxi_admins] = await db.query('SELECT id, name, email, password FROM taxi_admins WHERE email = ?', [email]);
         
-        if (admins.length > 0) {
-            const user = admins[0];
+        if (taxi_admins.length > 0) {
+            const user = taxi_admins[0];
             const isMatch = await bcrypt.compare(password, user.password);
             if (isMatch) {
                 delete user.password;
@@ -728,7 +862,7 @@ app.post('/api/admin/login', async (req, res) => {
 app.post('/api/driver/login', async (req, res) => {
     try {
         const { phone, password } = req.body;
-        const [drivers] = await db.query('SELECT id, name, email, phone, car_model, car_number, vehicle_type, wallet_balance, password, is_blocked FROM drivers WHERE phone = ?', [phone]);
+        const [drivers] = await db.query('SELECT id, name, email, phone, car_model, car_number, vehicle_type, wallet_balance, password, is_blocked FROM taxi_drivers WHERE phone = ?', [phone]);
         
         if (drivers.length > 0) {
             const user = drivers[0];
@@ -753,8 +887,8 @@ app.post('/api/driver/register/send-otp', async (req, res) => {
         if (!email) return res.status(400).json({ error: 'Email is required for verification.' });
 
         // Check if email already in use
-        const [existing] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
-        const [existingApp] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
+        const [existing] = await db.query('SELECT id FROM taxi_drivers WHERE email = ?', [email]);
+        const [existingApp] = await db.query('SELECT id FROM taxi_driver_applications WHERE email = ?', [email]);
         if (existing.length > 0 || existingApp.length > 0) {
             return res.status(400).json({ error: 'This email is already registered or has a pending application.' });
         }
@@ -831,10 +965,10 @@ app.post('/api/driver/register', upload.fields([
         // }
 
         // Check availability
-        const [existingEmail] = await db.query('SELECT id FROM driver_applications WHERE email = ?', [email]);
-        const [existingDriverEmail] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
-        const [existingPhone] = await db.query('SELECT id FROM driver_applications WHERE phone = ?', [phone]);
-        const [existingDriverPhone] = await db.query('SELECT id FROM drivers WHERE phone = ?', [phone]);
+        const [existingEmail] = await db.query('SELECT id FROM taxi_driver_applications WHERE email = ?', [email]);
+        const [existingDriverEmail] = await db.query('SELECT id FROM taxi_drivers WHERE email = ?', [email]);
+        const [existingPhone] = await db.query('SELECT id FROM taxi_driver_applications WHERE phone = ?', [phone]);
+        const [existingDriverPhone] = await db.query('SELECT id FROM taxi_drivers WHERE phone = ?', [phone]);
 
         if (existingEmail.length > 0 || existingDriverEmail.length > 0) {
             return res.status(400).json({ error: 'This email is already registered or has a pending application.' });
@@ -851,7 +985,7 @@ app.post('/api/driver/register', upload.fields([
         };
 
         const sql = `
-            INSERT INTO driver_applications 
+            INSERT INTO taxi_driver_applications 
             (name, email, password, phone, car_model, car_number, vehicle_type, 
              dl_front, dl_back, pvc, aadhar_front, aadhar_back, 
              rc_book, insurance, pollution, permit) 
@@ -877,7 +1011,7 @@ app.post('/api/driver/register', upload.fields([
 app.get('/api/admin/driver-applications', async (req, res) => {
     try {
         const { status } = req.query;
-        let sql = 'SELECT * FROM driver_applications';
+        let sql = 'SELECT * FROM taxi_driver_applications';
         let params = [];
         
         if (status) {
@@ -899,7 +1033,7 @@ app.get('/api/admin/driver-applications', async (req, res) => {
 
 app.get('/api/admin/driver-applications/history', async (req, res) => {
     try {
-        const [apps] = await db.query('SELECT * FROM driver_applications WHERE status = "approved" ORDER BY created_at DESC');
+        const [apps] = await db.query('SELECT * FROM taxi_driver_applications WHERE status = "approved" ORDER BY created_at DESC');
         res.json({ success: true, applications: apps });
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch application history.' });
@@ -909,7 +1043,7 @@ app.get('/api/admin/driver-applications/history', async (req, res) => {
 app.post('/api/admin/driver-applications/decision', async (req, res) => {
     const { appId, status, note } = req.body; // status: approved or rejected
     try {
-        const [apps] = await db.query('SELECT * FROM driver_applications WHERE id = ?', [appId]);
+        const [apps] = await db.query('SELECT * FROM taxi_driver_applications WHERE id = ?', [appId]);
         if (apps.length === 0) return res.status(404).json({ error: 'Application not found.' });
         
         const app = apps[0];
@@ -917,7 +1051,7 @@ app.post('/api/admin/driver-applications/decision', async (req, res) => {
         if (status === 'approved') {
             // Move to drivers table with all documents
             const sql = `
-                INSERT INTO drivers (
+                INSERT INTO taxi_drivers (
                     name, email, password, phone, car_model, car_number, vehicle_type, approval_status,
                     dl_front, dl_back, pvc, aadhar_front, aadhar_back, rc_book, insurance, pollution, permit
                 )
@@ -931,14 +1065,14 @@ app.post('/api/admin/driver-applications/decision', async (req, res) => {
             await db.query(sql, values);
             
             // Mark application as approved (History Storage)
-            await db.query('UPDATE driver_applications SET status = "approved", admin_note = ? WHERE id = ?', [note || 'Approved by Command', appId]);
+            await db.query('UPDATE taxi_driver_applications SET status = "approved", admin_note = ? WHERE id = ?', [note || 'Approved by Command', appId]);
 
             // Optional: Send Email Notification
             await sendBrevoMail(app.email, 'CityRide Pilot Identity Verified', `<h2>Welcome to the fleet, Pilot!</h2><p>Your application has been authorized by Command. You can now log in to the Driver Portal and begin your missions.</p>`).catch(e => console.error('Approval notification failed', e));
 
         } else {
             // REJECTED: Delete application data as requested
-            await db.query('DELETE FROM driver_applications WHERE id = ?', [appId]);
+            await db.query('DELETE FROM taxi_driver_applications WHERE id = ?', [appId]);
             
             // Optional: Send Email Notification before deletion? 
             // Better to send first then delete, but we already have 'app' data in memory.
@@ -955,7 +1089,7 @@ app.post('/api/admin/driver-applications/decision', async (req, res) => {
 // 4.1 Get Latest Driver Info
 app.get('/api/driver/info/:id', async (req, res) => {
     try {
-        const [drivers] = await db.query('SELECT id, name, email, phone, car_model, car_number, vehicle_type, wallet_balance FROM drivers WHERE id = ?', [req.params.id]);
+        const [drivers] = await db.query('SELECT id, name, email, phone, car_model, car_number, vehicle_type, wallet_balance FROM taxi_drivers WHERE id = ?', [req.params.id]);
         if (drivers.length > 0) {
             res.json({ success: true, driver: drivers[0] });
         } else {
@@ -970,7 +1104,7 @@ app.get('/api/driver/info/:id', async (req, res) => {
 app.post('/api/vendor/login', async (req, res) => {
     try {
         const { vendor_id, password } = req.body;
-        const [rows] = await db.query('SELECT * FROM vendors WHERE vendor_id = ?', [vendor_id]);
+        const [rows] = await db.query('SELECT * FROM taxi_vendors WHERE vendor_id = ?', [vendor_id]);
         
         if (rows.length > 0) {
             const vendor = rows[0];
@@ -1012,7 +1146,7 @@ app.post('/api/chat', async (req, res) => {
         Your style: Friendly, professional, and concise (max 2 sentences).
         Core Knowledge:
         - Fares: Sedan is ₹25/KM. SUV is ₹35/KM.
-        - Limits: Local rides are capped at 50 KM (otherwise use Outstation).
+        - Limits: No KM limit for local rides. Outstation rides are for longer distances between cities.
         Response Instructions: 
         - Only mention booking or redirecting if the user specifically asks how to book or seems ready to ride. 
         - Answer their specific question directly first.
@@ -1102,7 +1236,7 @@ app.post('/api/bookings/create', async (req, res) => {
             booking.vendorMarkup || 0,
             booking.rentalPackage || null
         ];
-        const [result] = await db.query('INSERT INTO bookings (user_id, pickup_loc, pickup_coords, drop_loc, drop_coords, pickup_date, pickup_time, passengers, vehicle_type, trip_type, fare, distance, journey_otp, status, vendor_id, vendor_markup, rental_package) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values);
+        const [result] = await db.query('INSERT INTO taxi_bookings (user_id, pickup_loc, pickup_coords, drop_loc, drop_coords, pickup_date, pickup_time, passengers, vehicle_type, trip_type, fare, distance, journey_otp, status, vendor_id, vendor_markup, rental_package) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)', values);
         res.json({ success: true, bookingId: result.insertId, journeyOtp: journeyOtp });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1115,7 +1249,7 @@ app.post('/api/user/cancel-ride', async (req, res) => {
         const { bookingId, userId } = req.body;
         if (!bookingId || !userId) return res.status(400).json({ error: 'bookingId and userId are required.' });
 
-        const [passRows] = await db.query('SELECT id, banned_until FROM passengers WHERE id = ?', [userId]);
+        const [passRows] = await db.query('SELECT id, banned_until FROM taxi_passengers WHERE id = ?', [userId]);
         if (passRows.length === 0) return res.status(404).json({ error: 'User not found.' });
         const passenger = passRows[0];
         if (passenger.banned_until) {
@@ -1130,18 +1264,18 @@ app.post('/api/user/cancel-ride', async (req, res) => {
             }
         }
 
-        const [bookings] = await db.query('SELECT id, status FROM bookings WHERE id = ? AND user_id = ?', [bookingId, userId]);
+        const [bookings] = await db.query('SELECT id, status FROM taxi_bookings WHERE id = ? AND user_id = ?', [bookingId, userId]);
         if (bookings.length === 0) return res.status(404).json({ error: 'Booking not found.' });
         if (!['pending', 'assigned'].includes(bookings[0].status)) {
             return res.status(400).json({ error: 'Only pending or assigned rides can be cancelled.' });
         }
 
-        await db.query('UPDATE bookings SET status = "cancelled", driver_id = NULL WHERE id = ?', [bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = "cancelled", driver_id = NULL WHERE id = ?', [bookingId]);
 
         const todayStart = new Date();
         todayStart.setHours(0, 0, 0, 0);
         const [cancelRows] = await db.query(
-            `SELECT COUNT(*) as cnt FROM bookings WHERE user_id = ? AND status = 'cancelled' AND created_at >= ?`,
+            `SELECT COUNT(*) as cnt FROM taxi_bookings WHERE user_id = ? AND status = 'cancelled' AND created_at >= ?`,
             [userId, todayStart]
         );
         const cancelCount = cancelRows[0].cnt;
@@ -1178,8 +1312,8 @@ app.get('/api/user/bookings/:userId', async (req, res) => {
     try {
         const sql = `
             SELECT b.*, d.name as driver_name, d.phone as driver_phone, d.car_model, d.car_number 
-            FROM bookings b 
-            LEFT JOIN drivers d ON b.driver_id = d.id 
+            FROM taxi_bookings b 
+            LEFT JOIN taxi_drivers d ON b.driver_id = d.id 
             WHERE b.user_id = ? 
             ORDER BY b.created_at DESC
         `;
@@ -1194,13 +1328,13 @@ app.get('/api/user/bookings/:userId', async (req, res) => {
 app.post('/api/bookings/accept', async (req, res) => {
     try {
         const { bookingId, driverId } = req.body;
-        const [bookings] = await db.query('SELECT fare FROM bookings WHERE id = ? AND status = "pending"', [bookingId]);
+        const [bookings] = await db.query('SELECT fare FROM taxi_bookings WHERE id = ? AND status = "pending"', [bookingId]);
         if (bookings.length === 0) return res.status(400).json({ error: 'Ride no longer available.' });
         
         const bookingFare = parseFloat(bookings[0].fare.replace(/[^0-9.]/g, '')) || 0;
         const requiredBalance = bookingFare * 0.10;
         
-        const [drivers] = await db.query('SELECT wallet_balance FROM drivers WHERE id = ?', [driverId]);
+        const [drivers] = await db.query('SELECT wallet_balance FROM taxi_drivers WHERE id = ?', [driverId]);
         if (drivers.length === 0) return res.status(400).json({ error: 'Pilot not found.' });
         
         if (parseFloat(drivers[0].wallet_balance) < requiredBalance) {
@@ -1208,13 +1342,13 @@ app.post('/api/bookings/accept', async (req, res) => {
         }
 
         // --- ENFORCE SINGLE ACTIVE MISSION RULE ---
-        const [active] = await db.query('SELECT id FROM bookings WHERE driver_id = ? AND status = "assigned"', [driverId]);
+        const [active] = await db.query('SELECT id FROM taxi_bookings WHERE driver_id = ? AND status = "assigned"', [driverId]);
         if (active.length > 0) {
             return res.status(400).json({ error: 'Ground Control: You already have an active mission locked in. Complete your current duty before accepting new targets.' });
         }
 
-        await db.query('UPDATE bookings SET status = "assigned", driver_id = ? WHERE id = ?', [driverId, bookingId]);
-        await db.query('UPDATE drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [requiredBalance, driverId]);
+        await db.query('UPDATE taxi_bookings SET status = "assigned", driver_id = ? WHERE id = ?', [driverId, bookingId]);
+        await db.query('UPDATE taxi_drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [requiredBalance, driverId]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1225,11 +1359,11 @@ app.post('/api/bookings/accept', async (req, res) => {
 app.post('/api/driver/request-cancel', async (req, res) => {
     try {
         const { bookingId, driverId, reason } = req.body;
-        const [bookings] = await db.query('SELECT status FROM bookings WHERE id = ? AND driver_id = ?', [bookingId, driverId]);
+        const [bookings] = await db.query('SELECT status FROM taxi_bookings WHERE id = ? AND driver_id = ?', [bookingId, driverId]);
         if (bookings.length === 0) return res.status(404).json({ error: 'Mission not found.' });
         if (bookings[0].status !== 'assigned') return res.status(400).json({ error: 'Only assigned missions can be aborted.' });
 
-        await db.query('UPDATE bookings SET status = "cancel_requested", cancel_reason = ? WHERE id = ?', [reason || 'No reason provided', bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = "cancel_requested", cancel_reason = ? WHERE id = ?', [reason || 'No reason provided', bookingId]);
         res.json({ success: true, message: 'Cancellation request sent to Ground Control.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1240,7 +1374,7 @@ app.post('/api/driver/request-cancel', async (req, res) => {
 app.post('/api/admin/approve-cancel', async (req, res) => {
     try {
         const { bookingId } = req.body;
-        await db.query('UPDATE bookings SET status = "cancelled", driver_id = NULL WHERE id = ?', [bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = "cancelled", driver_id = NULL WHERE id = ?', [bookingId]);
         res.json({ success: true, message: 'Mission officially aborted.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1251,12 +1385,12 @@ app.post('/api/admin/approve-cancel', async (req, res) => {
 app.post('/api/admin/reject-cancel', async (req, res) => {
     try {
         const { bookingId, note } = req.body;
-        const [bookings] = await db.query('SELECT driver_id, cancel_reason FROM bookings WHERE id = ?', [bookingId]);
+        const [bookings] = await db.query('SELECT driver_id, cancel_reason FROM taxi_bookings WHERE id = ?', [bookingId]);
         if (bookings.length > 0) {
             await db.query('INSERT INTO abort_rejections (booking_id, driver_id, original_reason, admin_note) VALUES (?, ?, ?, ?)', 
                 [bookingId, bookings[0].driver_id, bookings[0].cancel_reason, note || 'Rejected by Admin Control']);
         }
-        await db.query('UPDATE bookings SET status = "assigned" WHERE id = ?', [bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = "assigned" WHERE id = ?', [bookingId]);
         res.json({ success: true, message: 'Cancellation rejected. Mission remains active.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1269,8 +1403,8 @@ app.get('/api/admin/rejection-history', async (req, res) => {
         const sql = `
             SELECT r.*, d.name as driver_name, b.pickup_loc, b.drop_loc 
             FROM abort_rejections r
-            LEFT JOIN drivers d ON r.driver_id = d.id
-            LEFT JOIN bookings b ON r.booking_id = b.id
+            LEFT JOIN taxi_drivers d ON r.driver_id = d.id
+            LEFT JOIN taxi_bookings b ON r.booking_id = b.id
             ORDER BY r.created_at DESC
         `;
         const [rows] = await db.query(sql);
@@ -1285,7 +1419,7 @@ app.get('/api/driver/my-jobs/:driverId', async (req, res) => {
     try {
         const sql = `
             SELECT b.*, u.name as customer_name, u.phone as customer_phone 
-            FROM bookings b 
+            FROM taxi_bookings b 
             LEFT JOIN passengers u ON b.user_id = u.id 
             WHERE b.driver_id = ? AND b.status IN ("assigned", "ongoing", "finished", "completed", "cancel_requested")
             ORDER BY b.created_at DESC
@@ -1300,26 +1434,41 @@ app.get('/api/driver/my-jobs/:driverId', async (req, res) => {
 // 3. Admin Panel Stats
 app.get('/api/admin/stats', async (req, res) => {
     try {
-        const [totalBookings] = await db.query("SELECT COUNT(*) as count FROM bookings");
-        const [activeBookings] = await db.query("SELECT COUNT(*) as count FROM bookings WHERE status IN ('pending', 'assigned')");
-        const [totalRevenue] = await db.query("SELECT fare FROM bookings WHERE status = 'completed'");
-        const [driverCount] = await db.query("SELECT COUNT(*) as count FROM drivers");
-        const [userCount] = await db.query("SELECT COUNT(*) as count FROM passengers");
+        const [
+            [totalBookings],
+            [activeBookings],
+            [totalRevenue],
+            [driverCount],
+            [userCount]
+        ] = await Promise.all([
+            db.query("SELECT COUNT(*) as count FROM taxi_bookings"),
+            db.query("SELECT COUNT(*) as count FROM taxi_bookings WHERE status IN ('pending', 'assigned')"),
+            db.query("SELECT fare FROM taxi_bookings WHERE status = 'completed'"),
+            db.query("SELECT COUNT(*) as count FROM taxi_drivers"),
+            db.query("SELECT COUNT(*) as count FROM taxi_passengers")
+        ]);
 
         let revenue = 0;
         totalRevenue.forEach(row => {
-            revenue += parseFloat(row.fare.replace(/[^0-9.]/g, '')) || 0;
+            if (row.fare) {
+                // Remove non-numeric characters except dot
+                const numericFare = row.fare.toString().replace(/[^0-9.]/g, '');
+                revenue += parseFloat(numericFare) || 0;
+            }
         });
 
         res.json({
             totalBookings: totalBookings[0].count,
             activeBookings: activeBookings[0].count,
-            revenue: revenue,
+            revenue: Math.round(revenue * 100) / 100, // Round to 2 decimal places
             totalDrivers: driverCount[0].count,
             totalUsers: userCount[0].count
         });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('CRITICAL: Admin Stats Failure:', err.message);
+        // If it's a connection error, try to return 0s instead of crashing if possible, 
+        // but for now, we just return 500 with a better message
+        res.status(500).json({ error: 'Data Fetching Failed', details: err.message });
     }
 });
 
@@ -1330,10 +1479,10 @@ app.get('/api/admin/bookings', async (req, res) => {
             SELECT b.*, u.name as customer_name, u.phone as customer_phone, 
                    d.name as driver_name, d.car_model, d.car_number, d.phone as driver_phone,
                    v.business_name as vendor_business_name
-            FROM bookings b
-            LEFT JOIN passengers u ON b.user_id = u.id
-            LEFT JOIN drivers d ON b.driver_id = d.id
-            LEFT JOIN vendors v ON b.vendor_id = v.id
+            FROM taxi_bookings b
+            LEFT JOIN taxi_passengers u ON b.user_id = u.id
+            LEFT JOIN taxi_drivers d ON b.driver_id = d.id
+            LEFT JOIN taxi_vendors v ON b.vendor_id = v.id
             ORDER BY b.created_at DESC
         `;
         const [rows] = await db.query(sql);
@@ -1346,7 +1495,7 @@ app.get('/api/admin/bookings', async (req, res) => {
 // 3.2 Member Management
 app.get('/api/admin/users', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT id, name, email, phone, 'user' as role, is_blocked, created_at FROM passengers ORDER BY created_at DESC");
+        const [rows] = await db.query("SELECT id, name, email, phone, 'user' as role, is_blocked, created_at FROM taxi_passengers ORDER BY created_at DESC");
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1356,7 +1505,7 @@ app.get('/api/admin/users', async (req, res) => {
 // 3.2.1 Fleet Management
 app.get('/api/admin/drivers', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT id, name, email, phone, 'driver' as role, car_model, car_number, vehicle_type, wallet_balance, is_blocked, created_at FROM drivers ORDER BY created_at DESC");
+        const [rows] = await db.query("SELECT id, name, email, phone, 'driver' as role, car_model, car_number, vehicle_type, wallet_balance, is_blocked, created_at FROM taxi_drivers ORDER BY created_at DESC");
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1366,7 +1515,7 @@ app.get('/api/admin/drivers', async (req, res) => {
 // 3.3 Delete Operations
 app.post('/api/admin/delete-passenger', async (req, res) => {
     try {
-        await db.query("DELETE FROM passengers WHERE id = ?", [req.body.id]);
+        await db.query("DELETE FROM taxi_passengers WHERE id = ?", [req.body.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1375,7 +1524,7 @@ app.post('/api/admin/delete-passenger', async (req, res) => {
 
 app.post('/api/admin/delete-driver', async (req, res) => {
     try {
-        await db.query("DELETE FROM drivers WHERE id = ?", [req.body.id]);
+        await db.query("DELETE FROM taxi_drivers WHERE id = ?", [req.body.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1386,7 +1535,7 @@ app.post('/api/admin/update-user', async (req, res) => {
     try {
         const { id, name, email, phone, password } = req.body;
         
-        let sql = 'UPDATE passengers SET name = ?, email = ?, phone = ?';
+        let sql = 'UPDATE taxi_passengers SET name = ?, email = ?, phone = ?';
         let params = [name, email, phone];
 
         if (password && password.trim() !== "") {
@@ -1411,7 +1560,7 @@ app.post('/api/admin/update-driver', async (req, res) => {
     try {
         const { id, name, email, phone, car_model, car_number, vehicle_type, password } = req.body;
         
-        let sql = 'UPDATE drivers SET name = ?, email = ?, phone = ?, car_model = ?, car_number = ?, vehicle_type = ?';
+        let sql = 'UPDATE taxi_drivers SET name = ?, email = ?, phone = ?, car_model = ?, car_number = ?, vehicle_type = ?';
         let params = [name, email, phone, car_model, car_number, vehicle_type];
 
         if (password && password.trim() !== "") {
@@ -1434,7 +1583,7 @@ app.post('/api/admin/update-driver', async (req, res) => {
 // 3.4.1 Wallet Update
 app.post('/api/admin/update-driver-wallet', async (req, res) => {
     try {
-        await db.query('UPDATE drivers SET wallet_balance = ? WHERE id = ?', [req.body.wallet_balance, req.body.id]);
+        await db.query('UPDATE taxi_drivers SET wallet_balance = ? WHERE id = ?', [req.body.wallet_balance, req.body.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1449,7 +1598,7 @@ app.post('/api/admin/update-driver-password', async (req, res) => {
         
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        await db.query('UPDATE drivers SET password = ? WHERE id = ?', [hashedPassword, id]);
+        await db.query('UPDATE taxi_drivers SET password = ? WHERE id = ?', [hashedPassword, id]);
         res.json({ success: true, message: 'Driver password updated successfully.' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to update driver password.' });
@@ -1464,7 +1613,7 @@ app.post('/api/admin/update-passenger-password', async (req, res) => {
         
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        await db.query('UPDATE passengers SET password = ? WHERE id = ?', [hashedPassword, id]);
+        await db.query('UPDATE taxi_passengers SET password = ? WHERE id = ?', [hashedPassword, id]);
         res.json({ success: true, message: 'Passenger password updated successfully.' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to update passenger password.' });
@@ -1475,7 +1624,7 @@ app.post('/api/admin/update-passenger-password', async (req, res) => {
 app.post('/api/admin/toggle-block', async (req, res) => {
     try {
         const { id, type, status } = req.body;
-        const table = type === 'user' ? 'passengers' : 'drivers';
+        const table = type === 'user' ? 'taxi_passengers' : 'taxi_drivers';
         await db.query(`UPDATE ${table} SET is_blocked = ? WHERE id = ?`, [status, id]);
         res.json({ success: true, message: `Access ${status ? 'Revoked' : 'Restored'} successfully.` });
     } catch (err) {
@@ -1487,12 +1636,12 @@ app.post('/api/admin/toggle-block', async (req, res) => {
 app.post('/api/admin/create-driver', async (req, res) => {
     try {
         const { name, email, password, phone, car_model, car_number, vehicle_type } = req.body;
-        const [existing] = await db.query('SELECT id FROM drivers WHERE email = ?', [email]);
+        const [existing] = await db.query('SELECT id FROM taxi_drivers WHERE email = ?', [email]);
         if (existing.length > 0) return res.status(400).json({ error: 'Pilot email already authorized.' });
 
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        const sql = 'INSERT INTO drivers (name, email, password, phone, car_model, car_number, vehicle_type) VALUES (?, ?, ?, ?, ?, ?, ?)';
+        const sql = 'INSERT INTO taxi_drivers (name, email, password, phone, car_model, car_number, vehicle_type) VALUES (?, ?, ?, ?, ?, ?, ?)';
         await db.query(sql, [name, email, hashedPassword, phone, car_model, car_number, vehicle_type]);
         res.json({ success: true });
     } catch (err) {
@@ -1503,7 +1652,7 @@ app.post('/api/admin/create-driver', async (req, res) => {
 // 3.6 Vendor Partner Management
 app.get('/api/admin/vendors', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT id, vendor_id, name, business_name, email, phone, is_blocked, created_at FROM vendors ORDER BY created_at DESC");
+        const [rows] = await db.query("SELECT id, vendor_id, name, business_name, email, phone, is_blocked, created_at FROM taxi_vendors ORDER BY created_at DESC");
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch partners.' });
@@ -1515,10 +1664,10 @@ app.post('/api/admin/create-vendor', async (req, res) => {
         const { vendor_id, name, business_name, email, password, phone } = req.body;
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        const [existing] = await db.query('SELECT id FROM vendors WHERE vendor_id = ? OR email = ?', [vendor_id, email]);
+        const [existing] = await db.query('SELECT id FROM taxi_vendors WHERE vendor_id = ? OR email = ?', [vendor_id, email]);
         if (existing.length > 0) return res.status(400).json({ error: 'Partner ID or Email already exists.' });
 
-        const sql = 'INSERT INTO vendors (vendor_id, name, business_name, email, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
+        const sql = 'INSERT INTO taxi_vendors (vendor_id, name, business_name, email, password, phone) VALUES (?, ?, ?, ?, ?, ?)';
         await db.query(sql, [vendor_id, name, business_name, email, hashedPassword, phone]);
         res.json({ success: true });
     } catch (err) {
@@ -1528,7 +1677,7 @@ app.post('/api/admin/create-vendor', async (req, res) => {
 
 app.post('/api/admin/delete-vendor', async (req, res) => {
     try {
-        await db.query("DELETE FROM vendors WHERE id = ?", [req.body.id]);
+        await db.query("DELETE FROM taxi_vendors WHERE id = ?", [req.body.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1536,14 +1685,14 @@ app.post('/api/admin/delete-vendor', async (req, res) => {
 });
 app.get('/api/driver/jobs/:driverId', async (req, res) => {
     try {
-        const [driverRows] = await db.query('SELECT vehicle_type FROM drivers WHERE id = ?', [req.params.driverId]);
+        const [driverRows] = await db.query('SELECT vehicle_type FROM taxi_drivers WHERE id = ?', [req.params.driverId]);
         if (driverRows.length === 0) return res.status(404).json({ error: 'Driver not found' });
         
         const driverVehicleType = driverRows[0].vehicle_type;
         const sql = `
             SELECT b.*, u.name as customer_name, u.phone as customer_phone 
-            FROM bookings b 
-            LEFT JOIN passengers u ON b.user_id = u.id 
+            FROM taxi_bookings b 
+            LEFT JOIN taxi_passengers u ON b.user_id = u.id 
             WHERE b.status = "pending" AND b.vehicle_type = ?
             ORDER BY b.created_at ASC
         `;
@@ -1558,14 +1707,14 @@ app.get('/api/driver/jobs/:driverId', async (req, res) => {
 app.post('/api/admin/transfer-ride', async (req, res) => {
     try {
         const { bookingId, newDriverId } = req.body;
-        const [bookings] = await db.query('SELECT fare, status FROM bookings WHERE id = ?', [bookingId]);
+        const [bookings] = await db.query('SELECT fare, status FROM taxi_bookings WHERE id = ?', [bookingId]);
         if (bookings.length === 0) return res.status(404).json({ error: 'Booking not found.' });
 
         const fare = bookings[0].fare;
         const requiredBalance = (parseFloat(fare.replace(/[^0-9.]/g, '')) || 0) * 0.10;
 
-        await db.query('UPDATE bookings SET driver_id = ?, status = "assigned" WHERE id = ?', [newDriverId, bookingId]);
-        await db.query('UPDATE drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [requiredBalance, newDriverId]);
+        await db.query('UPDATE taxi_bookings SET driver_id = ?, status = "assigned" WHERE id = ?', [newDriverId, bookingId]);
+        await db.query('UPDATE taxi_drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [requiredBalance, newDriverId]);
         
         res.json({ success: true, message: `Ride #B${bookingId} assigned/transferred. Fee deducted.` });
     } catch (err) {
@@ -1579,7 +1728,7 @@ app.post('/api/bookings/start-journey', async (req, res) => {
         const { bookingId, startOdometer } = req.body;
         if (!bookingId || !startOdometer) return res.status(400).json({ error: 'Booking ID and Start Odometer are required.' });
         
-        await db.query('UPDATE bookings SET status = "ongoing", start_odometer = ?, journey_start_time = NOW() WHERE id = ?', [startOdometer, bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = "ongoing", start_odometer = ?, journey_start_time = NOW() WHERE id = ?', [startOdometer, bookingId]);
         res.json({ success: true, message: 'Journey started. Timer is now running.' });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1592,7 +1741,7 @@ app.post('/api/bookings/update-status', async (req, res) => {
         
         // If completing, verify OTP
         if (status === 'completed') {
-            const [rows] = await db.query('SELECT journey_otp, status, trip_type, rental_package, start_odometer, journey_start_time, vehicle_type, vendor_id, vendor_markup, driver_id, fare FROM bookings WHERE id = ?', [bookingId]);
+            const [rows] = await db.query('SELECT journey_otp, status, trip_type, rental_package, start_odometer, journey_start_time, vehicle_type, vendor_id, vendor_markup, driver_id, fare FROM taxi_bookings WHERE id = ?', [bookingId]);
             if (rows.length === 0) return res.status(404).json({ error: 'Booking missing.' });
             
             const booking = rows[0];
@@ -1605,7 +1754,7 @@ app.post('/api/bookings/update-status', async (req, res) => {
             let vendorProfitDeducted = 0;
             if (booking.status !== 'completed' && booking.vendor_id && parseFloat(booking.vendor_markup) > 0) {
                 vendorProfitDeducted = parseFloat(booking.vendor_markup);
-                await db.query('UPDATE drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [vendorProfitDeducted, booking.driver_id]);
+                await db.query('UPDATE taxi_drivers SET wallet_balance = wallet_balance - ? WHERE id = ?', [vendorProfitDeducted, booking.driver_id]);
                 console.log(`[FINANCE] Deducted ₹${vendorProfitDeducted} vendor profit from Driver #${booking.driver_id} for Ride #B${bookingId}`);
             }
 
@@ -1613,14 +1762,14 @@ app.post('/api/bookings/update-status', async (req, res) => {
             if (booking.trip_type === 'rental') {
                 // If they bypassed finish-trip somehow, we still need journey_end_time
                 if (!booking.journey_end_time) {
-                    await db.query('UPDATE bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
+                    await db.query('UPDATE taxi_bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
                 }
             } else {
                 // Non-rental rides also record end time
-                await db.query('UPDATE bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
+                await db.query('UPDATE taxi_bookings SET journey_end_time = NOW() WHERE id = ?', [bookingId]);
             }
 
-            await db.query('UPDATE bookings SET status = ? WHERE id = ?', [status, bookingId]);
+            await db.query('UPDATE taxi_bookings SET status = ? WHERE id = ?', [status, bookingId]);
             
             return res.json({ 
                 success: true, 
@@ -1630,7 +1779,7 @@ app.post('/api/bookings/update-status', async (req, res) => {
             });
         }
         
-        await db.query('UPDATE bookings SET status = ? WHERE id = ?', [status, bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = ? WHERE id = ?', [status, bookingId]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1643,7 +1792,7 @@ app.post('/api/bookings/finish-trip', async (req, res) => {
         const { bookingId, endOdometer } = req.body;
         if (!endOdometer) return res.status(400).json({ error: 'End Odometer reading is required.' });
 
-        const [rows] = await db.query('SELECT * FROM bookings WHERE id = ?', [bookingId]);
+        const [rows] = await db.query('SELECT * FROM taxi_bookings WHERE id = ?', [bookingId]);
         if (rows.length === 0) return res.status(404).json({ error: 'Booking not found.' });
 
         const booking = rows[0];
@@ -1685,7 +1834,7 @@ app.post('/api/bookings/finish-trip', async (req, res) => {
         }
 
         // Update booking to 'finished' state
-        await db.query('UPDATE bookings SET status = "finished", end_odometer = ?, journey_end_time = NOW(), fare = ? WHERE id = ?', [endOdometer, finalFareStr, bookingId]);
+        await db.query('UPDATE taxi_bookings SET status = "finished", end_odometer = ?, journey_end_time = NOW(), fare = ? WHERE id = ?', [endOdometer, finalFareStr, bookingId]);
         
         res.json({ 
             success: true, 
@@ -1743,7 +1892,7 @@ app.get('/api/config/maps-key', (req, res) => {
 // --- RATE TARIFF CONTROLLER ---
 app.get('/api/tariffs', async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT * FROM tariffs');
+        const [rows] = await db.query('SELECT * FROM taxi_tariffs');
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: 'Failed to fetch tariffs' });
@@ -1755,10 +1904,52 @@ app.post('/api/admin/update-tariff', async (req, res) => {
         const { id, config } = req.body;
         if (!id || !config) return res.status(400).json({ error: 'ID and config are required.' });
         
-        await db.query('UPDATE tariffs SET config = ? WHERE id = ?', [JSON.stringify(config), id]);
+        await db.query('UPDATE taxi_tariffs SET config = ? WHERE id = ?', [JSON.stringify(config), id]);
         res.json({ success: true, message: 'Tariff updated successfully.' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to update tariff.' });
+    }
+});
+
+// --- PEAK RULES CONTROLLER ---
+app.get('/api/peak-rules', async (req, res) => {
+    try {
+        const [rows] = await db.query('SELECT * FROM taxi_peak_rules ORDER BY start_time ASC');
+        res.json(rows);
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to fetch peak rules' });
+    }
+});
+
+app.post('/api/admin/peak-rules/add', async (req, res) => {
+    try {
+        const { start_time, end_time, surcharge_percentage } = req.body;
+        await db.query('INSERT INTO taxi_peak_rules (start_time, end_time, surcharge_percentage) VALUES (?, ?, ?)', 
+            [start_time, end_time, surcharge_percentage]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to add peak rule' });
+    }
+});
+
+app.post('/api/admin/peak-rules/update', async (req, res) => {
+    try {
+        const { id, start_time, end_time, surcharge_percentage } = req.body;
+        await db.query('UPDATE taxi_peak_rules SET start_time = ?, end_time = ?, surcharge_percentage = ? WHERE id = ?', 
+            [start_time, end_time, surcharge_percentage, id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to update peak rule' });
+    }
+});
+
+app.post('/api/admin/peak-rules/delete', async (req, res) => {
+    try {
+        const { id } = req.body;
+        await db.query('DELETE FROM taxi_peak_rules WHERE id = ?', [id]);
+        res.json({ success: true });
+    } catch (err) {
+        res.status(500).json({ error: 'Failed to delete peak rule' });
     }
 });
 
@@ -1773,3 +1964,6 @@ app.get('/api/test/daily-report', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+
+startServer();
+

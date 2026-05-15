@@ -231,6 +231,7 @@
                                 <select id="vehicle-type">
                                     <option value="auto">Auto Select</option>
                                     <option value="bike">Classy Bike Taxi (1 Seater)</option>
+                                    <option value="hatchback">Hatchback (Small / 3+1 Seater)</option>
                                     <option value="sedan" selected>Sedan (4+1 Seater)</option>
                                     <option value="suv">SUV (Xylo / 6+1 Seater)</option>
                                 </select>
@@ -305,6 +306,11 @@
         .support-submit { background: #1a1a1a; color: white; border: none; padding: 10px; border-radius: 6px; cursor: pointer; font-weight: 600; margin-top: 5px;}
         .support-submit:hover { background: #333; }
         .support-loader { display: none; text-align: center; font-size: 0.9rem; padding: 10px; color: #555; }
+
+        @media (max-width: 480px) {
+            .support-floating-btn { bottom: 20px; right: 20px; width: 50px; height: 50px; }
+            .support-widget-panel { width: calc(100vw - 40px); right: 20px; bottom: 80px; height: 450px; }
+        }
     </style>
 
     <button id="support-btn" class="support-floating-btn" onclick="toggleSupportWidget()">

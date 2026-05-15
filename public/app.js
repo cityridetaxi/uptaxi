@@ -3,9 +3,10 @@
  */
 
 const VEHICLE_ICONS = {
-    bike: `<svg viewBox="0 0 24 24"><path d="M15.5,5.5L11,9.48V7h-1v3.12l-4.5,3.98l0.66,0.75L10,11.53V15H9v1h5v-1h-1v-3.47l3.84,3.39l0.66-0.75L13.1,10.7l0.13-0.12 c0.37-0.34,0.6-0.81,0.6-1.34c0-0.54-0.24-1.03-0.62-1.37L15.5,5.5z M12.5,9.22l-0.5,0.44l-0.5-0.44V8.5h1V9.22z M12.5,13.78l1.5-1.32 v1.32H12.5z M18.5,14c-1.38,0-2.5,1.12-2.5,2.5s1.12,2.5,2.5,2.5s2.5-1.12,2.5-2.5S19.88,14,18.5,14z M18.5,18c-0.83,0-1.5-0.67-1.5-1.5 s0.67-1.5,1.5-1.5s1.5,0.67,1.5,1.5S19.33,18,18.5,18z M5.5,14c-1.38,0-2.5,1.12-2.5,2.5s1.12,2.5,2.5,2.5s2.5-1.12,2.5-2.5 S6.88,14,5.5,14z M5.5,18C4.67,18,4,17.33,4,16.5S4.67,15,5.5,15s1.5,0.67,1.5,1.5S6.33,18,5.5,18z"/></svg>`,
-    sedan: `<svg viewBox="0 0 24 24"><path d="M18.92,6.01C18.72,5.42,18.16,5,17.5,5h-11c-0.66,0-1.21,0.42-1.42,1.01L3,12v8c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-1 h12v1c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-8L18.92,6.01z M6.5,16c-0.83,0-1.5-0.67-1.5-1.5S5.67,13,6.5,13s1.5,0.67,1.5,1.5 S7.33,16,6.5,16z M17.5,16c-0.83,0-1.5-0.67-1.5-1.5s0.67-1.5,1.5-1.5s1.5,0.67,1.5,1.5S18.33,16,17.5,16z M5,11l1.5-4.5h11L19,11H5z"/></svg>`,
-    suv: `<svg viewBox="0 0 24 24"><path d="M17,11l-1.5-4.5h-7L7,11H17z M18.92,6.01C18.72,5.42,18.16,5,17.5,5h-11c-0.66,0-1.21,0.42-1.42,1.01L3,12v8 c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-1h12v1c0,0.55,0.45,1,1,1h1c0.55,0,1-0.45,1-1v-8L18.92,6.01z"/></svg>`
+    bike: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5.5 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5s-1.12 2.5-2.5 2.5z"/><path d="M18.5 17.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5s2.5 1.12 2.5 2.5s-1.12 2.5-2.5 2.5z"/><path d="M10 15h4l2-4h-8z"/><path d="M12 11V7c0-1-1-2-2-2"/><path d="M8 5h4"/></svg>`,
+    hatchback: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 14l2-6h14l2 6v5c0 .6-.4 1-1 1h-1a1 1 0 0 1-1-1v-1H5v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-5z"/><path d="M5 8V6a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v2"/><circle cx="7" cy="14" r="2" fill="currentColor"/><circle cx="17" cy="14" r="2" fill="currentColor"/></svg>`,
+    sedan: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2" fill="currentColor"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2" fill="currentColor"/><path d="M14 10V8m-4 2V8"/></svg>`,
+    suv: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="10" width="20" height="8" rx="1"/><path d="M4 10V5a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1v5"/><circle cx="7" cy="18" r="2" fill="currentColor"/><circle cx="17" cy="18" r="2" fill="currentColor"/><path d="M9 18h6"/></svg>`
 };
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -136,12 +137,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- Dynamic Tariff Storage ---
     let pricing = null;
+    let peakRules = [];
 
     async function fetchTariffs() {
         try {
+            // Fetch Standard Tariffs
             const res = await fetch(`${API_BASE_URL}/api/tariffs`);
             const data = await res.json();
             
+            // Fetch Peak Rules
+            const peakRes = await fetch(`${API_BASE_URL}/api/peak-rules`);
+            peakRules = await peakRes.json();
+            console.log('⚡ Dynamic Peak Rules Active:', peakRules);
+
             // Transform array into nested object structure expected by renderVehicleOptions
             const transformed = {};
             data.forEach(t => {
@@ -149,6 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     // Initialize with display properties (these could also be moved to DB eventually)
                     const displayInfo = {
                         bike: { name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1 },
+                        hatchback: { name: 'Hatchback', capacity: '3+1 Seater', maxPassengers: 3 },
                         sedan: { name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4 },
                         suv: { name: 'SUV', capacity: '6+1 Seater', maxPassengers: 6 }
                     };
@@ -166,6 +175,13 @@ document.addEventListener('DOMContentLoaded', () => {
                     name: 'Classy Bike Taxi', capacity: '1 Seater', maxPassengers: 1,
                     local: { base: 0, perKm: 10, minKm: 5 },
                     oneway: { base: 0, perKm: 10, minKm: 5, convenience: 0 }
+                },
+                hatchback: {
+                    name: 'Hatchback', capacity: '3+1 Seater', maxPassengers: 3,
+                    local: { base: 150, perKm: 20, minKm: 0 },
+                    oneway: { base: 0, perKm: 11, minKm: 100 },
+                    round: { base: 0, perKm: 10, minKmPerDay: 200 },
+                    rental: { '2-20': { base: 450, extraKm: 15, extraHour: 120 }, '4-40': { base: 850, extraKm: 15, extraHour: 120 }, '8-80': { base: 1600, extraKm: 14, extraHour: 100 }, '12-120': { base: 2200, extraKm: 13, extraHour: 100 } }
                 },
                 sedan: {
                     name: 'Sedan', capacity: '4+1 Seater', maxPassengers: 4,
@@ -211,11 +227,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (data.routes && data.routes.length > 0) {
                     const distanceInKm = Math.ceil(data.routes[0].distance / 1000);
                     
-                    if (currentCategory === 'local' && distanceInKm > 50) {
-                        alert('Route exceeds the Local City Limit (50 KM). Automatic switch to Outstation mode applied.');
-                        const outstationBtn = Array.from(categoryBtns).find(b => b.dataset.category === 'outstation');
-                        if (outstationBtn) return outstationBtn.click();
-                    }
+
 
                     renderVehicleOptions(distanceInKm);
                 }
@@ -281,11 +293,20 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!timeStr) return 0;
                     const [h, m] = timeStr.split(':').map(Number);
                     const tm = h * 60 + m;
-                    // Morning Peak: 8 AM to 11 AM
-                    if (tm >= 480 && tm <= 660) return 0.25;
-                    // Evening Peak: 4 PM to 9 PM
-                    if (tm >= 960 && tm <= 1260) return 0.25;
-                    return 0;
+
+                    let highestSurcharge = 0;
+                    peakRules.forEach(rule => {
+                        const [sh, sm] = rule.start_time.split(':').map(Number);
+                        const [eh, em] = rule.end_time.split(':').map(Number);
+                        const stm = sh * 60 + sm;
+                        const etm = eh * 60 + em;
+
+                        if (tm >= stm && tm <= etm) {
+                            const surcharge = parseFloat(rule.surcharge_percentage) / 100;
+                            if (surcharge > highestSurcharge) highestSurcharge = surcharge;
+                        }
+                    });
+                    return highestSurcharge;
                 };
 
                 const peakMult = currentCategory === 'local' ? getPeakSurcharge(document.getElementById('pickup-time').value) : 0;
@@ -296,7 +317,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     const baseKmFare = config.base + (extraKm * config.perKm);
                     const peakCharge = baseKmFare * peakMult;
                     
-                    const minBill = vType === 'suv' ? 300 : (vType === 'sedan' ? 200 : 50);
+                    const minBill = vType === 'suv' ? 300 : (vType === 'sedan' ? 200 : (vType === 'hatchback' ? 150 : 50));
                     totalFare = Math.max(minBill, baseKmFare + peakCharge) * 1.05;
 
                     displayDistance = `${distance} KM`;
