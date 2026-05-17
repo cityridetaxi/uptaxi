@@ -5,7 +5,7 @@
  */
 
 // [IMPORTANT] Replace this with your actual live Railway project URL (e.g., https://myapp.up.railway.app)
-const PRODUCTION_URL = "https://cityride.up.railway.app";
+const PRODUCTION_URL = window.location.origin;
 // Auto-detect Local vs Production environment
 const isLocal = window.location.hostname === "localhost" || 
                 window.location.hostname === "127.0.0.1" || 
