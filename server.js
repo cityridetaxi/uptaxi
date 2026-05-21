@@ -113,19 +113,26 @@ async function initDB() {
     
     let host, port, user, password, database;
     
+    // Default to the config from .env (which contains public credentials)
+    const publicHost = process.env.DB_HOST || 'localhost';
+    const publicPort = parseInt(process.env.DB_PORT) || 3306;
+    const publicUser = process.env.DB_USER || 'root';
+    const publicPassword = process.env.DB_PASSWORD || '';
+    const publicDatabase = process.env.DB_NAME || 'railway';
+
     if (isRailway) {
-        host = process.env.MYSQLHOST;
-        port = parseInt(process.env.MYSQLPORT) || 3306;
-        user = process.env.MYSQLUSER;
-        password = process.env.MYSQLPASSWORD;
-        database = process.env.MYSQLDATABASE;
+        host = process.env.MYSQLHOST || publicHost;
+        port = parseInt(process.env.MYSQLPORT) || publicPort;
+        user = process.env.MYSQLUSER || publicUser;
+        password = process.env.MYSQLPASSWORD || publicPassword;
+        database = process.env.MYSQLDATABASE || publicDatabase;
         console.log('Detected Railway Container environment. Connecting internally to MySQL at:', host, 'on port:', port);
     } else {
-        host = process.env.DB_HOST || 'localhost';
-        port = parseInt(process.env.DB_PORT) || 3306;
-        user = process.env.DB_USER || 'root';
-        password = process.env.DB_PASSWORD || '';
-        database = process.env.DB_NAME || 'railway';
+        host = publicHost;
+        port = publicPort;
+        user = publicUser;
+        password = publicPassword;
+        database = publicDatabase;
         console.log('Detected Local/PC environment. Connecting to MySQL proxy at:', host, 'on port:', port);
     }
     
@@ -154,8 +161,22 @@ async function initDB() {
                 password: dbConfig.password
             });
         } catch (err) {
-            // Check for access denied error
-            if (err.code === 'ER_ACCESS_DENIED_ERROR' || err.errno === 1045) {
+            // If internal connection fails due to network/DNS resolution error, fall back to public TCP proxy
+            if (isRailway && dbConfig.host !== publicHost && (err.code === 'ENOTFOUND' || err.code === 'ETIMEDOUT' || err.code === 'ECONNREFUSED')) {
+                console.log(`⚠️ Internal connection to ${dbConfig.host} failed (${err.code}). Falling back to public TCP proxy...`);
+                dbConfig.host = publicHost;
+                dbConfig.port = publicPort;
+                dbConfig.user = publicUser;
+                dbConfig.password = publicPassword;
+                dbConfig.database = publicDatabase;
+                
+                tempConn = await mysql.createConnection({
+                    host: dbConfig.host,
+                    port: dbConfig.port,
+                    user: dbConfig.user,
+                    password: dbConfig.password
+                });
+            } else if (err.code === 'ER_ACCESS_DENIED_ERROR' || err.errno === 1045) {
                 const fallbackPassword = dbConfig.password === 'OsCrBsQQPvrhtgXtgSisFeudOJhodvLj' 
                     ? 'tADfuzVOcchhMLhmgPFuyykiwuzwJAYv' 
                     : 'OsCrBsQQPvrhtgXtgSisFeudOJhodvLj';
