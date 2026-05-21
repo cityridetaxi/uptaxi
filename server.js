@@ -108,14 +108,20 @@ async function sendBrevoMail(recipient, subject, htmlContent, attachments = []) 
 }
 
 async function initDB() {
-    console.log('Connecting to MySQL at:', process.env.DB_HOST);
+    const host = process.env.MYSQLHOST || process.env.DB_HOST || 'localhost';
+    const port = parseInt(process.env.MYSQLPORT || process.env.DB_PORT) || 3306;
+    const user = process.env.MYSQLUSER || process.env.DB_USER || 'root';
+    const password = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || '';
+    const database = process.env.MYSQLDATABASE || process.env.DB_NAME || 'railway';
+
+    console.log('Connecting to MySQL at:', host, 'on port:', port);
     
     const dbConfig = {
-        host: process.env.DB_HOST || 'localhost',
-        port: parseInt(process.env.DB_PORT) || 3306,
-        user: process.env.DB_USER || 'root',
-        password: process.env.DB_PASSWORD || '',
-        database: process.env.DB_NAME || 'railway',
+        host: host,
+        port: port,
+        user: user,
+        password: password,
+        database: database,
         waitForConnections: true,
         connectionLimit: 10,
         queueLimit: 0,
@@ -1966,4 +1972,3 @@ app.get('/api/test/daily-report', async (req, res) => {
 });
 
 startServer();
-
