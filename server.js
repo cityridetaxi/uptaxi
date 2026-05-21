@@ -108,13 +108,26 @@ async function sendBrevoMail(recipient, subject, htmlContent, attachments = []) 
 }
 
 async function initDB() {
-    const host = process.env.MYSQLHOST || process.env.DB_HOST || 'localhost';
-    const port = parseInt(process.env.MYSQLPORT || process.env.DB_PORT) || 3306;
-    const user = process.env.MYSQLUSER || process.env.DB_USER || 'root';
-    const password = process.env.MYSQLPASSWORD || process.env.DB_PASSWORD || '';
-    const database = process.env.MYSQLDATABASE || process.env.DB_NAME || 'railway';
-
-    console.log('Connecting to MySQL at:', host, 'on port:', port);
+    // Detect environment: use internal Railway variables only in actual cloud container
+    const isRailway = !!(process.env.RAILWAY_PROJECT_ID || process.env.RAILWAY_ENVIRONMENT_NAME || process.env.RAILWAY_STATIC_URL);
+    
+    let host, port, user, password, database;
+    
+    if (isRailway) {
+        host = process.env.MYSQLHOST;
+        port = parseInt(process.env.MYSQLPORT) || 3306;
+        user = process.env.MYSQLUSER;
+        password = process.env.MYSQLPASSWORD;
+        database = process.env.MYSQLDATABASE;
+        console.log('Detected Railway Container environment. Connecting internally to MySQL at:', host, 'on port:', port);
+    } else {
+        host = process.env.DB_HOST || 'localhost';
+        port = parseInt(process.env.DB_PORT) || 3306;
+        user = process.env.DB_USER || 'root';
+        password = process.env.DB_PASSWORD || '';
+        database = process.env.DB_NAME || 'railway';
+        console.log('Detected Local/PC environment. Connecting to MySQL proxy at:', host, 'on port:', port);
+    }
     
     const dbConfig = {
         host: host,
@@ -132,12 +145,33 @@ async function initDB() {
 
     try {
         // 1. Ensure Database Exists (Railway often pre-creates it, but this is safe)
-        const tempConn = await mysql.createConnection({
-            host: dbConfig.host,
-            port: dbConfig.port,
-            user: dbConfig.user,
-            password: dbConfig.password
-        });
+        let tempConn;
+        try {
+            tempConn = await mysql.createConnection({
+                host: dbConfig.host,
+                port: dbConfig.port,
+                user: dbConfig.user,
+                password: dbConfig.password
+            });
+        } catch (err) {
+            // Check for access denied error
+            if (err.code === 'ER_ACCESS_DENIED_ERROR' || err.errno === 1045) {
+                const fallbackPassword = dbConfig.password === 'OsCrBsQQPvrhtgXtgSisFeudOJhodvLj' 
+                    ? 'tADfuzVOcchhMLhmgPFuyykiwuzwJAYv' 
+                    : 'OsCrBsQQPvrhtgXtgSisFeudOJhodvLj';
+                console.log('Access denied. Attempting fallback password...');
+                tempConn = await mysql.createConnection({
+                    host: dbConfig.host,
+                    port: dbConfig.port,
+                    user: dbConfig.user,
+                    password: fallbackPassword
+                });
+                dbConfig.password = fallbackPassword;
+                console.log('Successfully connected using fallback password.');
+            } else {
+                throw err;
+            }
+        }
         
         await tempConn.query(`CREATE DATABASE IF NOT EXISTS \`${dbConfig.database}\` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`);
         await tempConn.end();
@@ -173,9 +207,26 @@ async function initDB() {
             )
         `);
 
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS passengers (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                name VARCHAR(100),
+                email VARCHAR(100),
+                password VARCHAR(255),
+                phone VARCHAR(20) UNIQUE,
+                otp_verified TINYINT DEFAULT 0,
+                banned_until TIMESTAMP NULL,
+                is_blocked TINYINT DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         // Migration: Ensure is_blocked exists
         try {
             await db.query('ALTER TABLE taxi_passengers ADD COLUMN is_blocked TINYINT DEFAULT 0');
+        } catch (e) { /* existing */ }
+        try {
+            await db.query('ALTER TABLE passengers ADD COLUMN is_blocked TINYINT DEFAULT 0');
         } catch (e) { /* existing */ }
 
         // taxi_drivers
@@ -390,6 +441,17 @@ async function initDB() {
             )
         `);
 
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS abort_rejections (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                booking_id INT,
+                driver_id INT,
+                original_reason TEXT,
+                admin_note TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
         // OTPs Table (For Email Verification)
         await db.query(`
             CREATE TABLE IF NOT EXISTS taxi_otps (
@@ -403,6 +465,16 @@ async function initDB() {
         // Tariffs
         await db.query(`
             CREATE TABLE IF NOT EXISTS taxi_tariffs (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                vehicle_type VARCHAR(50),
+                category VARCHAR(50),
+                config JSON,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            )
+        `);
+
+        await db.query(`
+            CREATE TABLE IF NOT EXISTS tariffs (
                 id INT AUTO_INCREMENT PRIMARY KEY,
                 vehicle_type VARCHAR(50),
                 category VARCHAR(50),
@@ -529,16 +601,35 @@ async function initDB() {
                 }
                 console.log('Default tariffs initialized.');
             } else {
-                    // Check if hatchbacks specifically are missing (Migration)
-                    const [hatchRows] = await db.query('SELECT COUNT(*) as cnt FROM taxi_tariffs WHERE vehicle_type = "hatchback"');
-                    if (hatchRows[0].cnt === 0) {
-                        const hatchTariffs = defaultTariffs.filter(t => t.vehicle_type === 'hatchback');
-                        for (const t of hatchTariffs) {
-                            await db.query('INSERT INTO taxi_tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
-                        }
-                        console.log('✅ Migration: Hatchback tariffs added.');
+                // Check if hatchbacks specifically are missing (Migration)
+                const [hatchRows] = await db.query('SELECT COUNT(*) as cnt FROM taxi_tariffs WHERE vehicle_type = "hatchback"');
+                if (hatchRows[0].cnt === 0) {
+                    const hatchTariffs = defaultTariffs.filter(t => t.vehicle_type === 'hatchback');
+                    for (const t of hatchTariffs) {
+                        await db.query('INSERT INTO taxi_tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
                     }
+                    console.log('✅ Migration: Hatchback tariffs added.');
                 }
+            }
+
+            // Also seed non-prefixed tariffs table if empty
+            const [tariffRows2] = await db.query('SELECT COUNT(*) as cnt FROM tariffs');
+            if (tariffRows2[0].cnt === 0) {
+                for (const t of defaultTariffs) {
+                    await db.query('INSERT INTO tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
+                }
+                console.log('Default tariffs (non-prefixed) initialized.');
+            } else {
+                // Check if hatchbacks specifically are missing (Migration)
+                const [hatchRows2] = await db.query('SELECT COUNT(*) as cnt FROM tariffs WHERE vehicle_type = "hatchback"');
+                if (hatchRows2[0].cnt === 0) {
+                    const hatchTariffs = defaultTariffs.filter(t => t.vehicle_type === 'hatchback');
+                    for (const t of hatchTariffs) {
+                        await db.query('INSERT INTO tariffs (vehicle_type, category, config) VALUES (?, ?, ?)', [t.vehicle_type, t.category, t.config]);
+                    }
+                    console.log('✅ Migration: Hatchback tariffs (non-prefixed) added.');
+                }
+            }
             } catch (e) {
                 console.error('Tariff initialization failed:', e.message);
             }
