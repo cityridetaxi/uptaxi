@@ -1367,7 +1367,11 @@ app.post('/api/user/cancel-ride', async (req, res) => {
         const { bookingId, userId } = req.body;
         if (!bookingId || !userId) return res.status(400).json({ error: 'bookingId and userId are required.' });
 
-        const [passRows] = await db.query('SELECT id, banned_until FROM taxi_passengers WHERE id = ?', [userId]);
+        // Check both tables — users may exist in either `passengers` or `taxi_passengers`
+        let [passRows] = await db.query('SELECT id, banned_until FROM passengers WHERE id = ?', [userId]);
+        if (passRows.length === 0) {
+            [passRows] = await db.query('SELECT id, banned_until FROM taxi_passengers WHERE id = ?', [userId]);
+        }
         if (passRows.length === 0) return res.status(404).json({ error: 'User not found.' });
         const passenger = passRows[0];
         if (passenger.banned_until) {
@@ -1403,6 +1407,7 @@ app.post('/api/user/cancel-ride', async (req, res) => {
         if (cancelCount >= 3) {
             banUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
             await db.query('UPDATE passengers SET banned_until = ? WHERE id = ?', [banUntil, userId]);
+            await db.query('UPDATE taxi_passengers SET banned_until = ? WHERE id = ?', [banUntil, userId]).catch(() => {});
             banned = true;
         }
 
@@ -1412,10 +1417,29 @@ app.post('/api/user/cancel-ride', async (req, res) => {
     }
 });
 
+// 2.1.1a Admin Cancel Ride (Status Update) — used by admin dashboard
+app.post('/api/bookings/update-status', async (req, res) => {
+    try {
+        const { bookingId, status } = req.body;
+        if (!bookingId || !status) return res.status(400).json({ error: 'bookingId and status are required.' });
+        await db.query('UPDATE taxi_bookings SET status = ? WHERE id = ?', [status, bookingId]);
+        // If cancelling, also unassign the driver
+        if (status === 'cancelled') {
+            await db.query('UPDATE taxi_bookings SET driver_id = NULL WHERE id = ?', [bookingId]);
+        }
+        res.json({ success: true, message: `Booking #${bookingId} updated to ${status}.` });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 // 2.1.2 Check Passenger Ban Status
 app.get('/api/user/ban-status/:userId', async (req, res) => {
     try {
-        const [rows] = await db.query('SELECT banned_until FROM passengers WHERE id = ?', [req.params.userId]);
+        let [rows] = await db.query('SELECT banned_until FROM passengers WHERE id = ?', [req.params.userId]);
+        if (rows.length === 0) {
+            [rows] = await db.query('SELECT banned_until FROM taxi_passengers WHERE id = ?', [req.params.userId]);
+        }
         if (rows.length === 0) return res.status(404).json({ error: 'User not found.' });
         const banEnd = rows[0].banned_until ? new Date(rows[0].banned_until) : null;
         const isBanned = banEnd && banEnd > new Date();
@@ -1563,7 +1587,7 @@ app.get('/api/admin/stats', async (req, res) => {
             db.query("SELECT COUNT(*) as count FROM taxi_bookings WHERE status IN ('pending', 'assigned')"),
             db.query("SELECT fare FROM taxi_bookings WHERE status = 'completed'"),
             db.query("SELECT COUNT(*) as count FROM taxi_drivers"),
-            db.query("SELECT COUNT(*) as count FROM taxi_passengers")
+            db.query("SELECT COUNT(*) as count FROM passengers")
         ]);
 
         let revenue = 0;
@@ -1598,7 +1622,7 @@ app.get('/api/admin/bookings', async (req, res) => {
                    d.name as driver_name, d.car_model, d.car_number, d.phone as driver_phone,
                    v.business_name as vendor_business_name
             FROM taxi_bookings b
-            LEFT JOIN taxi_passengers u ON b.user_id = u.id
+            LEFT JOIN passengers u ON b.user_id = u.id
             LEFT JOIN taxi_drivers d ON b.driver_id = d.id
             LEFT JOIN taxi_vendors v ON b.vendor_id = v.id
             ORDER BY b.created_at DESC
@@ -1613,7 +1637,7 @@ app.get('/api/admin/bookings', async (req, res) => {
 // 3.2 Member Management
 app.get('/api/admin/users', async (req, res) => {
     try {
-        const [rows] = await db.query("SELECT id, name, email, phone, 'user' as role, is_blocked, created_at FROM taxi_passengers ORDER BY created_at DESC");
+        const [rows] = await db.query("SELECT id, name, email, phone, 'user' as role, is_blocked, created_at FROM passengers ORDER BY created_at DESC");
         res.json(rows);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1633,7 +1657,7 @@ app.get('/api/admin/drivers', async (req, res) => {
 // 3.3 Delete Operations
 app.post('/api/admin/delete-passenger', async (req, res) => {
     try {
-        await db.query("DELETE FROM taxi_passengers WHERE id = ?", [req.body.id]);
+        await db.query("DELETE FROM passengers WHERE id = ?", [req.body.id]);
         res.json({ success: true });
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1653,7 +1677,7 @@ app.post('/api/admin/update-user', async (req, res) => {
     try {
         const { id, name, email, phone, password } = req.body;
         
-        let sql = 'UPDATE taxi_passengers SET name = ?, email = ?, phone = ?';
+        let sql = 'UPDATE passengers SET name = ?, email = ?, phone = ?';
         let params = [name, email, phone];
 
         if (password && password.trim() !== "") {
@@ -1731,7 +1755,7 @@ app.post('/api/admin/update-passenger-password', async (req, res) => {
         
         const salt = await bcrypt.genSalt(10);
         const hashedPassword = await bcrypt.hash(password, salt);
-        await db.query('UPDATE taxi_passengers SET password = ? WHERE id = ?', [hashedPassword, id]);
+        await db.query('UPDATE passengers SET password = ? WHERE id = ?', [hashedPassword, id]);
         res.json({ success: true, message: 'Passenger password updated successfully.' });
     } catch (err) {
         res.status(500).json({ error: 'Failed to update passenger password.' });
@@ -1742,7 +1766,7 @@ app.post('/api/admin/update-passenger-password', async (req, res) => {
 app.post('/api/admin/toggle-block', async (req, res) => {
     try {
         const { id, type, status } = req.body;
-        const table = type === 'user' ? 'taxi_passengers' : 'taxi_drivers';
+        const table = type === 'user' ? 'passengers' : 'taxi_drivers';
         await db.query(`UPDATE ${table} SET is_blocked = ? WHERE id = ?`, [status, id]);
         res.json({ success: true, message: `Access ${status ? 'Revoked' : 'Restored'} successfully.` });
     } catch (err) {
@@ -1810,7 +1834,7 @@ app.get('/api/driver/jobs/:driverId', async (req, res) => {
         const sql = `
             SELECT b.*, u.name as customer_name, u.phone as customer_phone 
             FROM taxi_bookings b 
-            LEFT JOIN taxi_passengers u ON b.user_id = u.id 
+            LEFT JOIN passengers u ON b.user_id = u.id 
             WHERE b.status = "pending" AND b.vehicle_type = ?
             ORDER BY b.created_at ASC
         `;
